@@ -12,7 +12,7 @@
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `OPENAI_API_KEY`
-- `MDB_AI_BACKEND_URL`
+- `NEXT_PUBLIC_MDB_AI_BACKEND_URL`
 
 ## 4. Setup Steps
 1. Push your code to GitHub (see previous instructions).

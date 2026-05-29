@@ -1,22 +1,47 @@
 import { useState, useEffect } from 'react';
 
-  const [form, setForm] = useState({ name: '', email: '', phone: '', address: '', city: '', utility_company: '', service_type: '', priority: '', pipeline_stage: 'New Lead' });
+type Lead = {
+  name?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  utility_company?: string;
+  service_type?: string;
+  priority?: string;
+  pipeline_stage?: string;
+};
+
+type EditLeadModalProps = {
+  open: boolean;
+  onClose: () => void;
+  onSave: (lead: Lead) => void | Promise<void>;
+  lead?: Lead | null;
+};
+
+export default function EditLeadModal({ open, onClose, onSave, lead }: EditLeadModalProps) {
+
+  const [form, setForm] = useState<Lead>({ name: '', email: '', phone: '', address: '', city: '', utility_company: '', service_type: '', priority: '', pipeline_stage: 'New Lead' });
   const [errors, setErrors] = useState<{[k: string]: string}>({});
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string|null>(null);
 
   useEffect(() => {
-    if (lead) setForm({
-      name: lead.name || '',
-      email: lead.email || '',
-      phone: lead.phone || '',
-      address: lead.address || '',
-      city: lead.city || '',
-      utility_company: lead.utility_company || '',
-      service_type: lead.service_type || '',
-      priority: lead.priority || '',
-      pipeline_stage: lead.pipeline_stage || 'New Lead',
-    });
+    if (lead) {
+      setForm({
+        name: lead.name || '',
+        email: lead.email || '',
+        phone: lead.phone || '',
+        address: lead.address || '',
+        city: lead.city || '',
+        utility_company: lead.utility_company || '',
+        service_type: lead.service_type || '',
+        priority: lead.priority || '',
+        pipeline_stage: lead.pipeline_stage || 'New Lead',
+      });
+    } else {
+      setForm({ name: '', email: '', phone: '', address: '', city: '', utility_company: '', service_type: '', priority: '', pipeline_stage: 'New Lead' });
+    }
   }, [lead]);
 
   function validate() {

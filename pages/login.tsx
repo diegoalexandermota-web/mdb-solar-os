@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { supabase } from '../utils/supabaseClient';
 
+export default function Login() {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [sent, setSent] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState<string|null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   function validate() {
     if (!email.trim()) return 'Email is required';
@@ -38,14 +39,14 @@ import { supabase } from '../utils/supabaseClient';
   }
 
   return (
-    <div style={{maxWidth:400,margin:'0 auto',padding:24}}>
+    <div style={{ maxWidth: 400, margin: '0 auto', padding: 24 }}>
       <h1>Login</h1>
       {toast && <div className="toast">{toast}</div>}
       {sent ? <div>Check your email for the login link.</div> : (
         <form onSubmit={handleLogin} autoComplete="off">
           <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} disabled={saving} />
           {error && <div className="error-msg">{error}</div>}
-          <button type="submit" disabled={saving} style={{minWidth:120}}>{saving ? 'Sending...' : 'Send Magic Link'}</button>
+          <button type="submit" disabled={saving} style={{ minWidth: 120 }}>{saving ? 'Sending...' : 'Send Magic Link'}</button>
         </form>
       )}
       <style jsx>{`

@@ -1,84 +1,132 @@
+
+import EmptyState from '../../components/EmptyState';
+import SkeletonTable from '../../components/SkeletonTable';
+import ErrorState from '../../components/ErrorState';
+import AIAssistantPanel from '../../components/AIAssistantPanel';
+import EditLeadModal from '../../components/EditLeadModal';
+import TaskModal from '../../components/TaskModal';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../utils/supabaseClient';
-import EditLeadModal from '../../components/EditLeadModal';
-import TaskModal from '../../components/TaskModal';
-import AIAssistantPanel from '../../components/AIAssistantPanel';
-import SkeletonTable from '../../components/SkeletonTable';
-import EmptyState from '../../components/EmptyState';
-import ErrorState from '../../components/ErrorState';
+
+export default function LeadDetail() {
+  const router = useRouter();
+  const { id } = router.query;
+  const leadId = Array.isArray(id) ? id[0] : id;
+
+  const [lead, setLead] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [tasks, setTasks] = useState<any[]>([]);
   const [tasksLoading, setTasksLoading] = useState(true);
-  const [tasksError, setTasksError] = useState<string|null>(null);
-  useEffect(() => {
-    if (id) fetchLead();
-    // eslint-disable-next-line
-  }, [id]);
+  const [tasksError, setTasksError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (id) fetchTasks();
-    // eslint-disable-next-line
-  }, [id]);
-  async function fetchTasks() {
+  // Edit lead handler
+  const handleEdit = async (updatedLead: any) => {
+    if (!leadId) return;
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('leads')
+      .update({
+        ...updatedLead,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', leadId)
+      .select()
+      .single();
+
+    setLoading(false);
+
+    if (error) {
+      setToast('Unable to update lead');
+      return;
+    }
+
+    setLead(data);
+    setEditModalOpen(false);
+    setToast('Lead updated successfully');
+  };
+
+  // Archive the lead
+  const handleArchive = async () => {
+    if (!leadId) return;
+    setLoading(true);
+    const { error } = await supabase
+      .from('leads')
+      .update({ archived: true, updated_at: new Date().toISOString() })
+      .eq('id', leadId);
+    if (!error) {
+      setLead((prev: any) => ({ ...prev, archived: true }));
+      setToast('Lead archived');
+    } else {
+      setToast('Error archiving lead');
+    }
+    setLoading(false);
+  };
+
+  // Change pipeline stage
+  const handleStageChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    if (!leadId) return;
+    const newStage = e.target.value;
+    setLoading(true);
+    const { error } = await supabase
+      .from('leads')
+      .update({ pipeline_stage: newStage, updated_at: new Date().toISOString() })
+      .eq('id', leadId);
+    if (!error) {
+      setLead((prev: any) => ({ ...prev, pipeline_stage: newStage }));
+      setToast('Stage updated');
+    } else {
+      setToast('Error updating stage');
+    }
+    setLoading(false);
+  };
+
+  // Fetch lead details
+  const fetchLead = async () => {
+    if (!leadId) return;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from('leads').select('*').eq('id', leadId).single();
+      if (!error) setLead(data);
+      else setLead(null);
+    } catch (e) {
+      setLead(null);
+    }
+    setLoading(false);
+  };
+
+  // Fetch tasks for this lead
+  const fetchTasks = async () => {
+    if (!leadId) return;
     setTasksLoading(true);
     setTasksError(null);
-    const { data, error } = await supabase.from('tasks').select('*').eq('lead_id', id).order('due_date', { ascending: true });
+    const { data, error } = await supabase.from('tasks').select('*').eq('lead_id', leadId).order('due_date', { ascending: true });
     if (!error) setTasks(data || []);
     else setTasksError(error.message || 'Unable to load tasks');
     setTasksLoading(false);
-  }
+  };
+
+  useEffect(() => {
+    if (!leadId) return;
+    fetchLead();
+    fetchTasks();
+    // eslint-disable-next-line
+  }, [leadId]);
+
+  // Save task handler
   async function handleSaveTask(task: any) {
-    const { error } = await supabase.from('tasks').insert([{ ...task, lead_id: id }]);
+    const { error } = await supabase.from('tasks').insert([{ ...task, lead_id: leadId }]);
     if (!error) setToast('Task created');
     else setToast('Error creating task');
     setTaskModalOpen(false);
     fetchTasks();
-  return (
-    <div>
-      <h1>Lead Detail</h1>
-      <button onClick={() => setEditModalOpen(true)}>Edit</button>
-      <button onClick={handleArchive} disabled={lead.archived}>Archive</button>
-      <label style={{marginLeft:8}}>Pipeline Stage:
-        <select value={lead.pipeline_stage} onChange={handleStageChange}>
-          {['New Lead','Contacted','Appointment Set','Proposal Sent','Credit Approved','Contract Signed','Site Survey','Permit','Install Scheduled','Installed','PTO','Commission Paid'].map(stage => (
-            <option key={stage} value={stage}>{stage}</option>
-          ))}
-        </select>
-      </label>
-      <div className="lead-actions-row" style={{marginTop:16,display:'flex',flexWrap:'wrap',gap:8}}>
-        <button className="touch-target" onClick={() => handleAction('call')} disabled={!lead.phone}>Call</button>
-        <button className="touch-target" onClick={() => handleAction('sms')} disabled={!lead.phone}>SMS</button>
-        <button className="touch-target" onClick={() => handleAction('whatsapp')} disabled={!lead.phone}>WhatsApp</button>
-        <button className="touch-target" onClick={() => handleAction('email')} disabled={!lead.email}>Email</button>
-        <button className="touch-target" onClick={() => handleAction('schedule_task')}>Schedule Task</button>
-        <button className="touch-target" onClick={() => setToast('Coming soon.')}>Create Proposal</button>
-      </div>
-
-      <TaskModal open={taskModalOpen} onClose={() => setTaskModalOpen(false)} onSave={handleSaveTask} leadId={id as string} />
-
-      <div style={{marginTop:32}}>
-        <h3>Tasks</h3>
-        {tasks.length === 0 && <div>No tasks yet.</div>}
-        <ul>
-          {tasks.map(task => (
-            <li key={task.id} style={{marginBottom:8}}>
-              <b>{task.title}</b> ({task.type}) - {task.due_date} {task.due_time} [{task.priority}]
-              <span style={{marginLeft:8}}>{task.completed ? '✅' : ''}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <AIAssistantPanel context={{lead, tasks}} />
-
-      <EditLeadModal open={editModalOpen} onClose={() => setEditModalOpen(false)} onSave={handleEdit} lead={lead} />
-      {toast && <div style={{position:'fixed',top:10,right:10,background:'#2b3990',color:'#fff',padding:'0.5rem 1rem',borderRadius:4}}>{toast}</div>}
-    </div>
-  );
-    fetchLead();
   }
 
+  // Action handler
   function handleAction(type: string) {
     if (!lead) return;
     if (type === 'call') window.open(`tel:${lead.phone}`);
@@ -97,36 +145,36 @@ import ErrorState from '../../components/ErrorState';
       <h1>Lead Detail</h1>
       <button onClick={() => setEditModalOpen(true)}>Edit</button>
       <button onClick={handleArchive} disabled={lead.archived}>Archive</button>
-      <label style={{marginLeft:8}}>Pipeline Stage:
+      <label style={{ marginLeft: 8 }}>Pipeline Stage:
         <select value={lead.pipeline_stage} onChange={handleStageChange}>
-          {['New Lead','Contacted','Appointment Set','Proposal Sent','Credit Approved','Contract Signed','Site Survey','Permit','Install Scheduled','Installed','PTO','Commission Paid'].map(stage => (
+          {['New Lead', 'Contacted', 'Appointment Set', 'Proposal Sent', 'Credit Approved', 'Contract Signed', 'Site Survey', 'Permit', 'Install Scheduled', 'Installed', 'PTO', 'Commission Paid'].map(stage => (
             <option key={stage} value={stage}>{stage}</option>
           ))}
         </select>
       </label>
-      <div style={{marginTop:16}}>
-        <b>Name:</b> {lead.name}<br/>
-        <b>Email:</b> {lead.email}<br/>
-        <b>Phone:</b> {lead.phone}<br/>
-        <b>Address:</b> {lead.address}<br/>
-        <b>City:</b> {lead.city}<br/>
-        <b>Utility Company:</b> {lead.utility_company}<br/>
-        <b>Service Type:</b> {lead.service_type}<br/>
-        <b>Priority:</b> {lead.priority}<br/>
-        <b>Status:</b> {lead.status}<br/>
+      <div style={{ marginTop: 16 }}>
+        <b>Name:</b> {lead.name}<br />
+        <b>Email:</b> {lead.email}<br />
+        <b>Phone:</b> {lead.phone}<br />
+        <b>Address:</b> {lead.address}<br />
+        <b>City:</b> {lead.city}<br />
+        <b>Utility Company:</b> {lead.utility_company}<br />
+        <b>Service Type:</b> {lead.service_type}<br />
+        <b>Priority:</b> {lead.priority}<br />
+        <b>Status:</b> {lead.status}<br />
       </div>
-      <div style={{marginTop:16}}>
-        <button onClick={() => handleAction('call')} disabled={!lead.phone}>Call</button>
-        <button onClick={() => handleAction('sms')} disabled={!lead.phone}>SMS</button>
-        <button onClick={() => handleAction('whatsapp')} disabled={!lead.phone}>WhatsApp</button>
-        <button onClick={() => handleAction('email')} disabled={!lead.email}>Email</button>
-        <button onClick={() => handleAction('schedule_task')}>Schedule Task</button>
-        <button onClick={() => setToast('Coming soon.')}>Create Proposal</button>
+      <div className="lead-actions-row" style={{ marginTop: 16, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        <button className="touch-target" onClick={() => handleAction('call')} disabled={!lead.phone}>Call</button>
+        <button className="touch-target" onClick={() => handleAction('sms')} disabled={!lead.phone}>SMS</button>
+        <button className="touch-target" onClick={() => handleAction('whatsapp')} disabled={!lead.phone}>WhatsApp</button>
+        <button className="touch-target" onClick={() => handleAction('email')} disabled={!lead.email}>Email</button>
+        <button className="touch-target" onClick={() => handleAction('schedule_task')}>Schedule Task</button>
+        <button className="touch-target" onClick={() => setToast('Coming soon.')}>Create Proposal</button>
       </div>
 
-      <TaskModal open={taskModalOpen} onClose={() => setTaskModalOpen(false)} onSave={handleSaveTask} leadId={id as string} />
+      <TaskModal open={taskModalOpen} onClose={() => setTaskModalOpen(false)} onSave={handleSaveTask} leadId={leadId as string} />
 
-      <div style={{marginTop:32}}>
+      <div style={{ marginTop: 32 }}>
         <h3>Tasks</h3>
         {tasksLoading ? (
           <SkeletonTable rows={3} cols={2} />
@@ -137,9 +185,9 @@ import ErrorState from '../../components/ErrorState';
         ) : (
           <ul className="task-list">
             {tasks.map(task => (
-              <li key={task.id} style={{marginBottom:8,padding:'0.5em 0.5em',borderRadius:6,background:'#f4f6fa'}}>
+              <li key={task.id} style={{ marginBottom: 8, padding: '0.5em 0.5em', borderRadius: 6, background: '#f4f6fa' }}>
                 <b>{task.title}</b> ({task.type}) - {task.due_date} {task.due_time} [{task.priority}]
-                <span style={{marginLeft:8}}>{task.completed ? '✅' : ''}</span>
+                <span style={{ marginLeft: 8 }}>{task.completed ? '✅' : ''}</span>
               </li>
             ))}
           </ul>
@@ -171,11 +219,11 @@ import ErrorState from '../../components/ErrorState';
           }
         `}</style>
       </div>
-      <div style={{marginTop:32}}>
-        <AIAssistantPanel context={{lead, tasks}} />
+      <div style={{ marginTop: 32 }}>
+        <AIAssistantPanel context={{ lead, tasks }} />
       </div>
       <EditLeadModal open={editModalOpen} onClose={() => setEditModalOpen(false)} onSave={handleEdit} lead={lead} />
-      {toast && <div style={{position:'fixed',top:10,right:10,background:'#2b3990',color:'#fff',padding:'0.5rem 1rem',borderRadius:4}}>{toast}</div>}
+      {toast && <div style={{ position: 'fixed', top: 10, right: 10, background: '#2b3990', color: '#fff', padding: '0.5rem 1rem', borderRadius: 4 }}>{toast}</div>}
     </div>
   );
 }
