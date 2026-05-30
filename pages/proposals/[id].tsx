@@ -106,25 +106,40 @@ export default function ProposalBuilder() {
   if (!proposal) return <div>Loading...</div>;
 
   return (
-    <div className="proposal-root" style={{maxWidth:900,margin:'0 auto',padding:24}}>
-      <h1>Proposal Builder</h1>
-      {toast && <div style={{position:'fixed',top:10,right:10,background:'#2b3990',color:'#fff',padding:'0.5rem 1rem',borderRadius:4}}>{toast}</div>}
-      {/* Customer Information */}
-      <section style={{marginBottom:32}}>
-        <h2>Customer Information</h2>
-        <div>Name: {lead?.name || proposal.customer_name}</div>
-        <div>Phone: {lead?.phone}</div>
-        <div>Email: {lead?.email}</div>
-        <div>Address: {lead?.address || proposal.address}</div>
-        <div>City: {lead?.city}</div>
-        <div>Utility Company: {lead?.utility_company || proposal.utility_company}</div>
-        <div>Monthly Bill: {lead?.monthly_bill}</div>
-        <div>Service Type: {lead?.service_type}</div>
-      </section>
-      {/* Solar Estimate */}
-      <section style={{marginBottom:32}}>
-        <h2>Solar Estimate</h2>
-        <div className="proposal-estimate-fields" style={{display:'flex',flexWrap:'wrap',gap:12}}>
+    <div className="proposal-root">
+      {/* Command Center Header */}
+      <div className="proposal-header card">
+        <div className="proposal-header-main">
+          <div className="proposal-header-title-row">
+            <svg width="32" height="32" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="19" cy="19" r="19" fill="#2b3990"/>
+              <path d="M19 8L24.5 28H13.5L19 8Z" fill="#fbb040"/>
+            </svg>
+            <span className="proposal-header-title">Proposal Builder</span>
+          </div>
+        </div>
+      </div>
+      {toast && <div className="dashboard-toast" style={{position:'fixed',top:10,right:10,zIndex:1000}}>{toast}</div>}
+
+      {/* Customer Summary Card */}
+      <div className="proposal-customer-summary card">
+        <div className="proposal-customer-title">Customer Summary</div>
+        <div className="proposal-customer-fields">
+          <div><b>Name:</b> {lead?.name || proposal.customer_name}</div>
+          <div><b>Phone:</b> {lead?.phone}</div>
+          <div><b>Email:</b> {lead?.email}</div>
+          <div><b>Address:</b> {lead?.address || proposal.address}</div>
+          <div><b>City:</b> {lead?.city}</div>
+          <div><b>Utility Company:</b> {lead?.utility_company || proposal.utility_company}</div>
+          <div><b>Monthly Bill:</b> {lead?.monthly_bill}</div>
+          <div><b>Service Type:</b> {lead?.service_type}</div>
+        </div>
+      </div>
+
+      {/* Solar Estimate Card */}
+      <div className="proposal-estimate-card card">
+        <div className="proposal-estimate-title">Solar Estimate</div>
+        <div className="proposal-estimate-fields">
           <input placeholder="Annual Usage (kWh)" value={solarEstimate.annual_usage || ''} onChange={e => setSolarEstimate({ ...solarEstimate, annual_usage: e.target.value })} />
           <input placeholder="Monthly Usage (kWh)" value={solarEstimate.monthly_usage || ''} onChange={e => setSolarEstimate({ ...solarEstimate, monthly_usage: e.target.value })} />
           <input placeholder="System Size (kW)" value={solarEstimate.system_size || ''} onChange={e => setSolarEstimate({ ...solarEstimate, system_size: e.target.value })} />
@@ -136,63 +151,69 @@ export default function ProposalBuilder() {
           <input placeholder="Roof Usage %" value={solarEstimate.roof_usage || ''} onChange={e => setSolarEstimate({ ...solarEstimate, roof_usage: e.target.value })} />
           <input placeholder="TSRF / Sun Score" value={solarEstimate.sun_score || ''} onChange={e => setSolarEstimate({ ...solarEstimate, sun_score: e.target.value })} />
         </div>
-        <button className="touch-target" onClick={saveSolarEstimate}>Save Solar Estimate</button>
-      </section>
-      {/* Financing Scenarios */}
-      <section style={{marginBottom:32}}>
-        <h2>Financing Scenarios</h2>
+        <button className="proposal-action-btn" onClick={saveSolarEstimate}>Save Solar Estimate</button>
+      </div>
+
+      {/* Financing Scenario Cards */}
+      <div className="proposal-scenarios-section card">
+        <div className="proposal-scenarios-title-row">
+          <span className="proposal-scenarios-title">Financing Scenarios</span>
+          <button className="proposal-action-btn" onClick={addScenario}>+ Add Scenario</button>
+        </div>
         {scenarios.map((sc, idx) => (
-          <div key={idx} className="financing-scenario-card" style={{border:'1px solid #ccc',padding:16,marginBottom:16,borderRadius:8}}>
-            <label>Provider:
-              <select value={sc.provider} onChange={e => handleScenarioChange(idx, 'provider', e.target.value)}>
-                <option value="">Select</option>
-                {PROVIDERS.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
-              </select>
-            </label>
-            <label>Program Type:
-              <select value={sc.program_type} onChange={e => handleScenarioChange(idx, 'program_type', e.target.value)}>
-                <option value="">Select</option>
-                {getProviderTypes(sc.provider).map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </label>
-            <input placeholder="Monthly Payment" value={sc.monthly_payment || ''} onChange={e => handleScenarioChange(idx, 'monthly_payment', e.target.value)} />
-            <input placeholder="Down Payment" value={sc.down_payment || ''} onChange={e => handleScenarioChange(idx, 'down_payment', e.target.value)} />
-            <input placeholder="Term (years)" value={sc.term_years || ''} onChange={e => handleScenarioChange(idx, 'term_years', e.target.value)} />
-            <input placeholder="APR" value={sc.APR || ''} onChange={e => handleScenarioChange(idx, 'APR', e.target.value)} />
-            <input placeholder="Dealer Fee" value={sc.dealer_fee || ''} onChange={e => handleScenarioChange(idx, 'dealer_fee', e.target.value)} />
-            <input placeholder="Escalator" value={sc.escalator || ''} onChange={e => handleScenarioChange(idx, 'escalator', e.target.value)} />
-            <input placeholder="Ownership Type" value={sc.ownership_type || ''} onChange={e => handleScenarioChange(idx, 'ownership_type', e.target.value)} />
-            <label>Maintenance Included:
-              <select value={sc.maintenance_included || ''} onChange={e => handleScenarioChange(idx, 'maintenance_included', e.target.value)}>
-                <option value="">Select</option>
-                <option value="Yes">Yes</option>
-                <option value="No">No</option>
-              </select>
-            </label>
-            <label>Tax Credit Eligible:
-              <select value={sc.tax_credit_eligible || ''} onChange={e => handleScenarioChange(idx, 'tax_credit_eligible', e.target.value)}>
-                <option value="">Select</option>
-                <option value="Yes">Yes</option>
-                <option value="No">No</option>
-              </select>
-            </label>
-            <input placeholder="Est. Monthly Savings" value={sc.estimated_monthly_savings || ''} onChange={e => handleScenarioChange(idx, 'estimated_monthly_savings', e.target.value)} />
-            <input placeholder="Est. 25-Year Cost" value={sc.estimated_25_year_cost || ''} onChange={e => handleScenarioChange(idx, 'estimated_25_year_cost', e.target.value)} />
-            <input placeholder="Est. 25-Year Savings" value={sc.estimated_25_year_savings || ''} onChange={e => handleScenarioChange(idx, 'estimated_25_year_savings', e.target.value)} />
-            <label>Recommended:
-              <input type="checkbox" checked={!!sc.is_recommended} onChange={() => handleRecommend(idx)} />
-            </label>
-            <button className="touch-target" onClick={() => saveScenario(idx, sc)}>Save Scenario</button>
+          <div key={idx} className={`financing-scenario-card${sc.is_recommended ? ' recommended' : ''}`}>
+            <div className="scenario-fields">
+              <label>Provider:
+                <select value={sc.provider} onChange={e => handleScenarioChange(idx, 'provider', e.target.value)}>
+                  <option value="">Select</option>
+                  {PROVIDERS.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+                </select>
+              </label>
+              <label>Program Type:
+                <select value={sc.program_type} onChange={e => handleScenarioChange(idx, 'program_type', e.target.value)}>
+                  <option value="">Select</option>
+                  {getProviderTypes(sc.provider).map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </label>
+              <input placeholder="Monthly Payment" value={sc.monthly_payment || ''} onChange={e => handleScenarioChange(idx, 'monthly_payment', e.target.value)} />
+              <input placeholder="Down Payment" value={sc.down_payment || ''} onChange={e => handleScenarioChange(idx, 'down_payment', e.target.value)} />
+              <input placeholder="Term (years)" value={sc.term_years || ''} onChange={e => handleScenarioChange(idx, 'term_years', e.target.value)} />
+              <input placeholder="APR" value={sc.APR || ''} onChange={e => handleScenarioChange(idx, 'APR', e.target.value)} />
+              <input placeholder="Dealer Fee" value={sc.dealer_fee || ''} onChange={e => handleScenarioChange(idx, 'dealer_fee', e.target.value)} />
+              <input placeholder="Escalator" value={sc.escalator || ''} onChange={e => handleScenarioChange(idx, 'escalator', e.target.value)} />
+              <input placeholder="Ownership Type" value={sc.ownership_type || ''} onChange={e => handleScenarioChange(idx, 'ownership_type', e.target.value)} />
+              <label>Maintenance Included:
+                <select value={sc.maintenance_included || ''} onChange={e => handleScenarioChange(idx, 'maintenance_included', e.target.value)}>
+                  <option value="">Select</option>
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                </select>
+              </label>
+              <label>Tax Credit Eligible:
+                <select value={sc.tax_credit_eligible || ''} onChange={e => handleScenarioChange(idx, 'tax_credit_eligible', e.target.value)}>
+                  <option value="">Select</option>
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                </select>
+              </label>
+              <input placeholder="Est. Monthly Savings" value={sc.estimated_monthly_savings || ''} onChange={e => handleScenarioChange(idx, 'estimated_monthly_savings', e.target.value)} />
+              <input placeholder="Est. 25-Year Cost" value={sc.estimated_25_year_cost || ''} onChange={e => handleScenarioChange(idx, 'estimated_25_year_cost', e.target.value)} />
+              <input placeholder="Est. 25-Year Savings" value={sc.estimated_25_year_savings || ''} onChange={e => handleScenarioChange(idx, 'estimated_25_year_savings', e.target.value)} />
+              <label>Recommended:
+                <input type="checkbox" checked={!!sc.is_recommended} onChange={() => handleRecommend(idx)} />
+              </label>
+            </div>
+            <button className="proposal-action-btn" onClick={() => saveScenario(idx, sc)}>Save Scenario</button>
           </div>
         ))}
-        <button className="touch-target" onClick={addScenario}>Add Financing Scenario</button>
-      </section>
-      {/* Comparison Cards */}
-      <section style={{marginBottom:32}}>
-        <h2>Financing Comparison</h2>
-        <div className="comparison-cards" style={{display:'flex',gap:16,flexWrap:'wrap'}}>
+      </div>
+
+      {/* Side-by-Side Comparison */}
+      <div className="proposal-comparison-section card">
+        <div className="proposal-comparison-title">Financing Comparison</div>
+        <div className="comparison-cards">
           {scenarios.map((sc, idx) => (
-            <div key={idx} className="comparison-card" style={{border:'2px solid '+(sc.is_recommended?'#2b3990':'#ccc'),padding:16,borderRadius:8,minWidth:260,background:sc.is_recommended?'#fbb040':'#fff'}}>
+            <div key={idx} className={`comparison-card${sc.is_recommended ? ' recommended' : ''}`}>
               <b>{sc.provider}</b> <span>({sc.program_type})</span><br/>
               <div>Monthly Payment: ${sc.monthly_payment}</div>
               <div>Down Payment: ${sc.down_payment}</div>
@@ -209,35 +230,131 @@ export default function ProposalBuilder() {
             </div>
           ))}
         </div>
-      </section>
-      {/* MDB AI Proposal Summary */}
-      <section style={{marginBottom:32}}>
-        <h2>MDB AI Proposal Summary</h2>
-        <button className="touch-target" onClick={handleAISummary}>Generate AI Summary</button>
-        <div style={{marginTop:8,background:'#f4f6fa',padding:16,borderRadius:8,wordBreak:'break-word'}}>{aiSummary}</div>
-      </section>
-      {/* Proposal Actions */}
-      <section style={{marginBottom:32}}>
-        <h2>Proposal Actions</h2>
-        <div className="proposal-actions-row" style={{display:'flex',flexWrap:'wrap',gap:8}}>
-          <button className="touch-target" onClick={saveProposal}>Save Proposal</button>
-          <button className="touch-target" onClick={() => setToast('Coming soon.')}>Duplicate Proposal</button>
-          <button className="touch-target" onClick={() => setToast('Coming soon.')}>Mark as Sent</button>
-          <button className="touch-target" onClick={() => setToast('Coming soon.')}>Send via Email</button>
-          <button className="touch-target" onClick={() => setToast('Coming soon.')}>Send via WhatsApp</button>
-          <button className="touch-target" onClick={() => setToast('Coming soon.')}>Add to Customer Portal</button>
-          <button className="touch-target" onClick={() => setToast('PDF export coming soon.')}>Export PDF</button>
+      </div>
+
+      {/* AI Proposal Assistant Panel */}
+      <div className="proposal-ai-panel card">
+        <div className="proposal-ai-title-row">
+          <span className="proposal-ai-title">MDB AI Proposal Summary</span>
+          <button className="proposal-action-btn" onClick={handleAISummary}>Generate AI Summary</button>
         </div>
-      </section>
+        <div className="proposal-ai-summary">{aiSummary}</div>
+      </div>
+
+      {/* Proposal Actions Bar */}
+      <div className="proposal-actions-bar card">
+        <div className="proposal-actions-row">
+          <button className="proposal-action-btn" onClick={saveProposal}>Save Proposal</button>
+          <button className="proposal-action-btn" onClick={() => setToast('Coming soon.')}>Duplicate Proposal</button>
+          <button className="proposal-action-btn" onClick={() => setToast('Coming soon.')}>Mark as Sent</button>
+          <button className="proposal-action-btn" onClick={() => setToast('Coming soon.')}>Send via Email</button>
+          <button className="proposal-action-btn" onClick={() => setToast('Coming soon.')}>Send via WhatsApp</button>
+          <button className="proposal-action-btn" onClick={() => setToast('Coming soon.')}>Add to Customer Portal</button>
+          <button className="proposal-action-btn" onClick={() => setToast('PDF export coming soon.')}>Export PDF</button>
+        </div>
+      </div>
+
       <style jsx>{`
+        .proposal-root {
+          max-width: 900px;
+          margin: 0 auto;
+          padding: 2.5rem 1rem 3rem 1rem;
+        }
+        .card {
+          margin-bottom: 1.7rem;
+        }
+        .proposal-header {
+          background: #fff;
+          box-shadow: 0 2px 12px rgba(43,57,144,0.07);
+          border-radius: 0 0 18px 18px;
+          padding: 2.2rem 2.2rem 1.2rem 2.2rem;
+          margin-bottom: 1.5rem;
+        }
+        .proposal-header-main {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+        .proposal-header-title-row {
+          display: flex;
+          align-items: center;
+          gap: 0.7rem;
+        }
+        .proposal-header-title {
+          font-size: 1.45rem;
+          font-weight: 700;
+          color: #2b3990;
+          letter-spacing: -0.5px;
+        }
+        .proposal-customer-summary {
+          display: flex;
+          flex-direction: column;
+          gap: 0.7rem;
+        }
+        .proposal-customer-title {
+          font-weight: 700;
+          color: #2b3990;
+        }
+        .proposal-customer-fields > div {
+          margin-bottom: 0.2em;
+        }
+        .proposal-estimate-card {
+          display: flex;
+          flex-direction: column;
+          gap: 0.7rem;
+        }
+        .proposal-estimate-title {
+          font-weight: 700;
+          color: #2b3990;
+        }
+        .proposal-estimate-fields {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 12px;
+        }
         .proposal-estimate-fields input {
           min-width: 180px;
           flex: 1 1 180px;
         }
+        .proposal-scenarios-section {
+          display: flex;
+          flex-direction: column;
+          gap: 1.1rem;
+        }
+        .proposal-scenarios-title-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+        .proposal-scenarios-title {
+          font-size: 1.13rem;
+          font-weight: 700;
+          color: #2b3990;
+        }
         .financing-scenario-card {
+          background: #f4f6fa;
+          border-radius: 8px;
+          padding: 1.1rem 1rem;
+          box-shadow: 0 1px 4px rgba(43,57,144,0.04);
+          margin-bottom: 1.1rem;
+        }
+        .financing-scenario-card.recommended {
+          border-left: 6px solid #fbb040;
+          background: #fffbe6;
+        }
+        .scenario-fields {
           display: flex;
           flex-wrap: wrap;
           gap: 10px;
+        }
+        .proposal-comparison-section {
+          margin-top: 2.2rem;
+        }
+        .proposal-comparison-title {
+          font-size: 1.13rem;
+          font-weight: 700;
+          color: #2b3990;
+          margin-bottom: 0.7rem;
         }
         .comparison-cards {
           display: flex;
@@ -247,15 +364,71 @@ export default function ProposalBuilder() {
         .comparison-card {
           min-width: 260px;
           max-width: 98vw;
+          background: #fff;
+          border-radius: 10px;
+          box-shadow: 0 1px 4px rgba(43,57,144,0.04);
+          padding: 16px;
+          border: 2px solid #ccc;
         }
-        .proposal-actions-row button {
-          min-width: 44px;
-          min-height: 44px;
-          font-size: 1rem;
+        .comparison-card.recommended {
+          border: 2px solid #2b3990;
+          background: #fbb040;
+        }
+        .proposal-ai-panel {
+          margin-top: 2.2rem;
+          display: flex;
+          flex-direction: column;
+          gap: 0.7rem;
+        }
+        .proposal-ai-title-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+        .proposal-ai-title {
+          font-size: 1.13rem;
+          font-weight: 700;
+          color: #2b3990;
+        }
+        .proposal-ai-summary {
+          margin-top: 8px;
+          background: #f4f6fa;
+          padding: 16px;
+          border-radius: 8px;
+          word-break: break-word;
+        }
+        .proposal-actions-bar {
+          margin-top: 2.2rem;
+        }
+        .proposal-actions-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.7rem;
+        }
+        .proposal-action-btn {
+          border-radius: 7px;
+          font-weight: 600;
+          font-size: 0.97rem;
+          padding: 0.5em 1em;
+          border: none;
+          box-shadow: 0 1px 4px rgba(43,57,144,0.04);
+          transition: background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s;
+        }
+        .proposal-action-btn:active {
+          background: #1a1d2e;
+          color: #fff;
+          transform: scale(0.97);
         }
         @media (max-width: 900px) {
           .proposal-root {
-            padding: 8px !important;
+            padding: 1.2rem 0.2rem 2rem 0.2rem;
+          }
+          .card {
+            padding: 1.1rem;
+          }
+          .proposal-estimate-fields input {
+            min-width: 90vw;
+            flex: 1 1 90vw;
           }
           .comparison-cards {
             flex-direction: column;
@@ -264,6 +437,7 @@ export default function ProposalBuilder() {
           .comparison-card {
             min-width: 90vw;
             max-width: 99vw;
+            padding: 10px !important;
           }
           .proposal-actions-row {
             flex-direction: column;
@@ -272,16 +446,10 @@ export default function ProposalBuilder() {
         }
         @media (max-width: 600px) {
           .proposal-root {
-            padding: 2vw !important;
+            padding: 0.7rem 0.1rem 1.2rem 0.1rem;
           }
-          .proposal-estimate-fields input {
-            min-width: 90vw;
-            flex: 1 1 90vw;
-          }
-          .comparison-card {
-            min-width: 96vw;
-            max-width: 99vw;
-            padding: 10px !important;
+          .card {
+            padding: 0.7rem 0.3rem;
           }
         }
       `}</style>

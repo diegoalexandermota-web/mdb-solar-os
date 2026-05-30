@@ -59,11 +59,22 @@ export default function Proposals() {
   }
 
   return (
-    <div>
-      <h1>Proposals</h1>
-      <button onClick={() => { setModalOpen(true); setEditProposal(null); }}>New Proposal</button>
+    <div className="proposals-root">
+      {/* Command Center Header */}
+      <div className="proposals-header card">
+        <div className="proposals-header-main">
+          <div className="proposals-header-title-row">
+            <svg width="32" height="32" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="19" cy="19" r="19" fill="#2b3990"/>
+              <path d="M19 8L24.5 28H13.5L19 8Z" fill="#fbb040"/>
+            </svg>
+            <span className="proposals-header-title">Proposal Command Center</span>
+          </div>
+          <button className="proposals-new-btn" onClick={() => { setModalOpen(true); setEditProposal(null); }}>New Proposal</button>
+        </div>
+      </div>
       <ProposalModal open={modalOpen || !!editProposal} onClose={() => { setModalOpen(false); setEditProposal(null); }} onSave={handleSave} proposal={editProposal} />
-      {toast && <div style={{position:'fixed',top:10,right:10,background:'#2b3990',color:'#fff',padding:'0.5rem 1rem',borderRadius:4}}>{toast}</div>}
+      {toast && <div className="dashboard-toast" style={{position:'fixed',top:10,right:10,zIndex:1000}}>{toast}</div>}
       {loading ? (
         <SkeletonTable rows={6} cols={4} />
       ) : error ? (
@@ -71,18 +82,139 @@ export default function Proposals() {
       ) : proposals.filter(p => !p.archived).length === 0 ? (
         <EmptyState icon="📄" message="No proposals found. Create your first proposal to begin." action actionLabel="New Proposal" onAction={() => setModalOpen(true)} />
       ) : (
-        <ul>
+        <div className="proposals-list">
           {proposals.filter(p => !p.archived).map(proposal => (
-            <li key={proposal.id} style={{marginBottom:8,background:'#fff',padding:8,borderRadius:4}}>
-              <b>{proposal.customer_name}</b> ({proposal.status})
-              <span style={{marginLeft:8}}>Lead: <button onClick={() => openLead(proposal.lead_id)}>Open</button></span>
-              <button onClick={() => { setEditProposal(proposal); setModalOpen(false); }}>Edit</button>
-              <button onClick={() => handleArchive(proposal.id)}>Archive</button>
-              <button onClick={() => handleDuplicate(proposal)}>Duplicate</button>
-            </li>
+            <div key={proposal.id} className="proposal-card card">
+              <div className="proposal-card-header">
+                <span className="proposal-customer-name">{proposal.customer_name}</span>
+                <span className="proposal-status">{proposal.status}</span>
+              </div>
+              <div className="proposal-card-meta">
+                <span>Lead: <button className="proposal-lead-btn" onClick={() => openLead(proposal.lead_id)}>Open</button></span>
+                <span>Created: {proposal.created_at?.slice(0,10)}</span>
+              </div>
+              <div className="proposal-card-actions">
+                <button className="proposal-action-btn" onClick={() => { setEditProposal(proposal); setModalOpen(false); }}>Edit</button>
+                <button className="proposal-action-btn" onClick={() => handleArchive(proposal.id)}>Archive</button>
+                <button className="proposal-action-btn" onClick={() => handleDuplicate(proposal)}>Duplicate</button>
+              </div>
+            </div>
           ))}
-        </ul>
+        </div>
       )}
+      <style jsx>{`
+        .proposals-root {
+          max-width: 900px;
+          margin: 0 auto;
+          padding: 2.5rem 1rem 3rem 1rem;
+        }
+        .card {
+          margin-bottom: 1.7rem;
+        }
+        .proposals-header {
+          background: #fff;
+          box-shadow: 0 2px 12px rgba(43,57,144,0.07);
+          border-radius: 0 0 18px 18px;
+          padding: 2.2rem 2.2rem 1.2rem 2.2rem;
+          margin-bottom: 1.5rem;
+        }
+        .proposals-header-main {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+        .proposals-header-title-row {
+          display: flex;
+          align-items: center;
+          gap: 0.7rem;
+        }
+        .proposals-header-title {
+          font-size: 1.45rem;
+          font-weight: 700;
+          color: #2b3990;
+          letter-spacing: -0.5px;
+        }
+        .proposals-new-btn {
+          background: #fbb040;
+          color: #2b3990;
+          border: none;
+          border-radius: 7px;
+          font-weight: 700;
+          font-size: 1.07rem;
+          padding: 0.7em 1.3em;
+          box-shadow: 0 1px 4px rgba(43,57,144,0.04);
+          transition: background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s;
+        }
+        .proposals-list {
+          display: flex;
+          flex-direction: column;
+          gap: 1.2rem;
+        }
+        .proposal-card {
+          display: flex;
+          flex-direction: column;
+          gap: 0.7rem;
+          padding: 1.2rem 1.1rem;
+        }
+        .proposal-card-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+        .proposal-customer-name {
+          font-size: 1.13rem;
+          font-weight: 700;
+          color: #2b3990;
+        }
+        .proposal-status {
+          background: #b0b6d1;
+          color: #fff;
+          border-radius: 7px;
+          padding: 0.18em 0.7em;
+          font-size: 0.93rem;
+          font-weight: 700;
+        }
+        .proposal-card-meta {
+          display: flex;
+          gap: 1.2rem;
+          color: #444;
+          font-size: 1.01rem;
+        }
+        .proposal-card-actions {
+          display: flex;
+          gap: 0.7rem;
+        }
+        .proposal-action-btn, .proposal-lead-btn {
+          border-radius: 7px;
+          font-weight: 600;
+          font-size: 0.97rem;
+          padding: 0.5em 1em;
+          border: none;
+          box-shadow: 0 1px 4px rgba(43,57,144,0.04);
+          transition: background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s;
+        }
+        .proposal-action-btn:active, .proposal-lead-btn:active {
+          background: #1a1d2e;
+          color: #fff;
+          transform: scale(0.97);
+        }
+        @media (max-width: 900px) {
+          .proposals-root {
+            padding: 1.2rem 0.2rem 2rem 0.2rem;
+          }
+          .card {
+            padding: 1.1rem;
+          }
+        }
+        @media (max-width: 600px) {
+          .proposals-root {
+            padding: 0.7rem 0.1rem 1.2rem 0.1rem;
+          }
+          .card {
+            padding: 0.7rem 0.3rem;
+          }
+        }
+      `}</style>
     </div>
   );
 }
