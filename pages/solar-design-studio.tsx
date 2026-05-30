@@ -1,3 +1,4 @@
+  // Add Design to Proposal
 
 import React, { useRef, useState, useEffect } from "react";
 import { supabase } from "../utils/supabaseClient";
@@ -37,6 +38,39 @@ export default function SolarDesignStudio() {
   const [loadingDesigns, setLoadingDesigns] = useState(false);
   const [loadingDesignId, setLoadingDesignId] = useState(null);
   const [loadError, setLoadError] = useState(null);
+  // Add Design to Proposal
+  const [addingToProposal, setAddingToProposal] = useState(false);
+  async function handleAddDesignToProposal() {
+    if (!proposalId) {
+      setToast("Select or create a proposal first.");
+      setTimeout(() => setToast(null), 2500);
+      return;
+    }
+    setAddingToProposal(true);
+    setToast(null);
+    // Find the current design (if saved)
+    const design = {
+      system_size_kw: systemSize,
+      panel_count: panelCount,
+      estimated_production: estimatedProduction,
+      estimated_offset: estimatedOffset,
+    };
+    // Update proposal with design values and link
+    const { error } = await supabase.from('proposals').update({
+      system_size_kw: design.system_size_kw,
+      panel_count: design.panel_count,
+      estimated_production: design.estimated_production,
+      estimated_offset: design.estimated_offset,
+      solar_design_id: null // Optionally set to the current design's id if available
+    }).eq('id', proposalId);
+    setAddingToProposal(false);
+    if (error) {
+      setToast('Error updating proposal: ' + error.message);
+    } else {
+      setToast('Proposal updated with design values!');
+    }
+    setTimeout(() => setToast(null), 2500);
+  }
 
   // Fetch saved designs on mount
   useEffect(() => {
@@ -546,6 +580,15 @@ export default function SolarDesignStudio() {
             <div className="sds-info-card card">
               <div className="sds-info-title">Financing Summary</div>
               <div className="sds-info-content">Loan, Lease, Cash, etc.</div>
+              <button
+                className="sds-toolbar-btn"
+                type="button"
+                style={{marginTop:10}}
+                onClick={handleAddDesignToProposal}
+                disabled={addingToProposal || saving || !!loadingDesignId}
+              >
+                {addingToProposal ? "Adding..." : "Add Design to Proposal"}
+              </button>
             </div>
           </section>
         </div>

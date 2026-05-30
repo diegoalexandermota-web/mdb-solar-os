@@ -22,6 +22,8 @@ function getProviderTypes(provider) {
   return found ? found.types : [];
 }
 
+
+
 export default function ProposalBuilder() {
   const router = useRouter();
   const { id } = router.query;
@@ -31,6 +33,19 @@ export default function ProposalBuilder() {
   const [scenarios, setScenarios] = useState<any[]>([]);
   const [toast, setToast] = useState<string|null>(null);
   const [aiSummary, setAiSummary] = useState('');
+  const [linkedDesign, setLinkedDesign] = useState<any>(null);
+
+  useEffect(() => {
+    async function fetchLinkedDesign() {
+      if (proposal?.solar_design_id) {
+        const { data } = await supabase.from('solar_designs').select('*').eq('id', proposal.solar_design_id).single();
+        setLinkedDesign(data);
+      } else {
+        setLinkedDesign(null);
+      }
+    }
+    fetchLinkedDesign();
+  }, [proposal?.solar_design_id]);
 
   useEffect(() => {
     if (id) fetchProposal();
@@ -102,6 +117,26 @@ export default function ProposalBuilder() {
 
   function handleAISummary() {
     setAiSummary('MDB AI Proposal Summary: This is a professional placeholder summary. Your proposal is optimized for customer savings, clarity, and conversion. Financing options are compared for best fit.');
+  }
+
+  async function handleUseSolarDesignValues() {
+    if (!linkedDesign) return;
+    setToast('Populating from solar design...');
+    // Update proposal fields from linked design
+    const update = {
+      system_size_kw: linkedDesign.system_size_kw,
+      panel_count: linkedDesign.panel_count,
+      estimated_production: linkedDesign.estimated_production,
+      estimated_offset: linkedDesign.estimated_offset,
+    };
+    const { error } = await supabase.from('proposals').update(update).eq('id', id);
+    if (error) {
+      setToast('Error updating proposal: ' + error.message);
+    } else {
+      setToast('Proposal updated from solar design!');
+      setProposal((p: any) => ({ ...p, ...update }));
+    }
+    setTimeout(() => setToast(null), 2500);
   }
 
   if (!proposal) return <div>Loading...</div>;
@@ -252,6 +287,19 @@ export default function ProposalBuilder() {
 
       {/* Related Solar Designs */}
       <RelatedSolarDesigns proposalId={Array.isArray(id) ? id[0] : id} />
+
+      {/* Linked Solar Design Summary */}
+      {linkedDesign && (
+        <div className="proposal-linked-design-summary card" style={{marginTop:16}}>
+          <div className="proposal-customer-title">Linked Solar Design</div>
+          <div><b>Project Name:</b> {linkedDesign.project_name}</div>
+          <div><b>Panel Count:</b> {linkedDesign.panel_count}</div>
+          <div><b>System Size (kW):</b> {linkedDesign.system_size_kw}</div>
+          <div><b>Est. Production:</b> {linkedDesign.estimated_production}</div>
+          <div><b>Est. Offset:</b> {linkedDesign.estimated_offset}</div>
+          <button className="proposal-action-btn" style={{marginTop:10}} onClick={handleUseSolarDesignValues}>Use Solar Design Values</button>
+        </div>
+      )}
 
       {/* Proposal Actions Bar */}
       <div className="proposal-actions-bar card">
