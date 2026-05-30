@@ -1,17 +1,189 @@
+import React, { useRef, useState } from "react";
+
+const DEFAULT_PANEL = {
+  width: 80,
+  height: 40,
+  rotation: 0,
+  model: "SunPower SPR-X22-360",
+  wattage: 400,
+};
+const PANEL_MODELS = [
+  { label: "SunPower SPR-X22-360", wattage: 400 },
+  { label: "REC Alpha Pure-R", wattage: 410 },
+  { label: "QCells Q.PEAK DUO", wattage: 395 },
+];
+const INVERTERS = ["Enphase IQ8", "SolarEdge SE7600H", "Tesla Powerwall Inverter"];
+const BATTERIES = ["None", "Tesla Powerwall", "Enphase IQ Battery", "LG Chem RESU"];
+
+function getSystemSizeKw(panels, wattage) {
+  return ((panels * wattage) / 1000).toFixed(2);
+}
+
 export default function SolarDesignStudio() {
+  // Canvas state
+  const [bgImage, setBgImage] = useState(null);
+  const [panels, setPanels] = useState([]);
+  const [selectedPanel, setSelectedPanel] = useState(null);
+  const [panelModel, setPanelModel] = useState(PANEL_MODELS[0].label);
+  const [panelWattage, setPanelWattage] = useState(PANEL_MODELS[0].wattage);
+  const [inverter, setInverter] = useState(INVERTERS[0]);
+  const [battery, setBattery] = useState(BATTERIES[0]);
+  const [showPanels, setShowPanels] = useState(true);
+  const [showObstructions, setShowObstructions] = useState(false);
+  const [showIrradiance, setShowIrradiance] = useState(false);
+  const [showSetbacks, setShowSetbacks] = useState(false);
+  const canvasRef = useRef(null);
+
+  // Upload image
+  function handleImageUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => setBgImage(ev.target.result);
+    reader.readAsDataURL(file);
+  }
+
+  // Add panel
+  function addPanel() {
+    setPanels([
+      ...panels,
+      {
+        ...DEFAULT_PANEL,
+        model: panelModel,
+        wattage: panelWattage,
+        x: 120 + panels.length * 90,
+        y: 120,
+        id: Date.now() + Math.random(),
+      },
+    ]);
+  }
+
+  // Select panel
+  function selectPanel(id) {
+    setSelectedPanel(id);
+  }
+
+  // Move panel
+  function movePanel(dx, dy) {
+    setPanels((prev) =>
+      prev.map((p) =>
+        p.id === selectedPanel ? { ...p, x: p.x + dx, y: p.y + dy } : p
+      )
+    );
+  }
+
+  // Rotate panel
+  function rotatePanel() {
+    setPanels((prev) =>
+      prev.map((p) =>
+        p.id === selectedPanel ? { ...p, rotation: (p.rotation + 90) % 360 } : p
+      )
+    );
+  }
+
+  // Delete panel
+  function deletePanel() {
+    setPanels((prev) => prev.filter((p) => p.id !== selectedPanel));
+    setSelectedPanel(null);
+  }
+
+  // Duplicate row
+  function duplicateRow() {
+    if (!selectedPanel) return;
+    const base = panels.find((p) => p.id === selectedPanel);
+    if (!base) return;
+    const rowPanels = panels.filter((p) =>
+      Math.abs(p.y - base.y) < 10 && p.model === base.model && p.wattage === base.wattage
+    );
+    const newPanels = rowPanels.map((p) => ({
+      ...p,
+      y: p.y + base.height + 20,
+      id: Date.now() + Math.random(),
+    }));
+    setPanels([...panels, ...newPanels]);
+  }
+
+  // Clear layout
+  function clearLayout() {
+    setPanels([]);
+    setSelectedPanel(null);
+  }
+
+  // Change panel model
+  function handlePanelModel(e) {
+    const model = e.target.value;
+    setPanelModel(model);
+    const found = PANEL_MODELS.find((m) => m.label === model);
+    setPanelWattage(found ? found.wattage : 400);
+  }
+
+  // Layer toggles
+  function handleLayerToggle(layer) {
+    if (layer === "panels") setShowPanels((v) => !v);
+    if (layer === "obstructions") setShowObstructions((v) => !v);
+    if (layer === "irradiance") setShowIrradiance((v) => !v);
+    if (layer === "setbacks") setShowSetbacks((v) => !v);
+  }
+
+  // Canvas mouse events
+  const dragData = useRef({ dragging: false, offsetX: 0, offsetY: 0, id: null });
+  function onCanvasMouseDown(e) {
+    if (!showPanels) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    // Find topmost panel
+    for (let i = panels.length - 1; i >= 0; i--) {
+      const p = panels[i];
+      const dx = x - p.x;
+      const dy = y - p.y;
+      const w = p.rotation % 180 === 0 ? p.width : p.height;
+      const h = p.rotation % 180 === 0 ? p.height : p.width;
+      if (dx >= 0 && dx <= w && dy >= 0 && dy <= h) {
+        setSelectedPanel(p.id);
+        dragData.current = { dragging: true, offsetX: dx, offsetY: dy, id: p.id };
+        return;
+      }
+    }
+    setSelectedPanel(null);
+  }
+  function onCanvasMouseMove(e) {
+    if (!dragData.current.dragging) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setPanels((prev) =>
+      prev.map((p) =>
+        p.id === dragData.current.id
+          ? {
+              ...p,
+              x: x - dragData.current.offsetX,
+              y: y - dragData.current.offsetY,
+            }
+          : p
+      )
+    );
+  }
+  function onCanvasMouseUp() {
+    dragData.current = { dragging: false, offsetX: 0, offsetY: 0, id: null };
+  }
+
+  // Calculations
+  const panelCount = panels.length;
+  const systemSize = getSystemSizeKw(panelCount, panelWattage);
+
   return (
     <div className="sds-root">
       {/* Left Sidebar */}
       <aside className="sds-sidebar">
         <div className="sds-sidebar-header">Tools</div>
         <nav className="sds-sidebar-nav">
-          <button className="sds-sidebar-btn">Roof View</button>
-          <button className="sds-sidebar-btn">Satellite View</button>
-          <button className="sds-sidebar-btn">Irradiance Layer</button>
-          <button className="sds-sidebar-btn">Panel Placement</button>
-          <button className="sds-sidebar-btn">Battery Placement</button>
-          <button className="sds-sidebar-btn">Shading Analysis</button>
-          <button className="sds-sidebar-btn">Production Estimate</button>
+          <button className="sds-sidebar-btn" type="button">Roof View</button>
+          <button className="sds-sidebar-btn" type="button">Satellite View</button>
+          <button className="sds-sidebar-btn" type="button" onClick={() => handleLayerToggle("irradiance")}>Irradiance Layer</button>
+          <button className="sds-sidebar-btn" type="button" onClick={() => handleLayerToggle("panels")}>Panels</button>
+          <button className="sds-sidebar-btn" type="button" onClick={() => handleLayerToggle("obstructions")}>Obstructions</button>
+          <button className="sds-sidebar-btn" type="button" onClick={() => handleLayerToggle("setbacks")}>Setbacks</button>
         </nav>
       </aside>
 
@@ -27,10 +199,11 @@ export default function SolarDesignStudio() {
             <span className="sds-toolbar-title">Solar Design Studio</span>
           </div>
           <div className="sds-toolbar-actions">
-            <button className="sds-toolbar-btn">Undo</button>
-            <button className="sds-toolbar-btn">Redo</button>
-            <button className="sds-toolbar-btn">Save Design</button>
-            <button className="sds-toolbar-btn">Export</button>
+            <button className="sds-toolbar-btn" type="button" onClick={addPanel}>Add Panel</button>
+            <button className="sds-toolbar-btn" type="button" onClick={duplicateRow} disabled={!selectedPanel}>Duplicate Row</button>
+            <button className="sds-toolbar-btn" type="button" onClick={clearLayout} disabled={panels.length === 0}>Clear Layout</button>
+            <button className="sds-toolbar-btn" type="button" disabled>Save Design</button>
+            <button className="sds-toolbar-btn" type="button" disabled>Export</button>
           </div>
         </header>
 
@@ -47,7 +220,13 @@ export default function SolarDesignStudio() {
             </div>
             <div className="sds-info-card card">
               <div className="sds-info-title">Proposal Quick Stats</div>
-              <div className="sds-info-content">kW, Panels, Est. Savings, Payback, etc.</div>
+              <div className="sds-info-content">
+                <div><b>Panels:</b> {panelCount}</div>
+                <div><b>Panel Wattage:</b> {panelWattage} W</div>
+                <div><b>System Size:</b> {systemSize} kW</div>
+                <div><b>Est. Annual Production:</b> <span className="sds-placeholder">(placeholder)</span></div>
+                <div><b>Est. Offset:</b> <span className="sds-placeholder">(placeholder)</span></div>
+              </div>
             </div>
             <div className="sds-info-card card">
               <div className="sds-info-title">AI Solar Assistant</div>
@@ -59,16 +238,58 @@ export default function SolarDesignStudio() {
           <section className="sds-canvas-section">
             <div className="sds-canvas-placeholder">
               <div className="sds-canvas-label">Map / Design Canvas</div>
-              <div className="sds-canvas-tabs">
-                <span className="sds-canvas-tab">Roof View</span>
-                <span className="sds-canvas-tab">Satellite View</span>
-                <span className="sds-canvas-tab">Irradiance Layer</span>
-                <span className="sds-canvas-tab">Panel Placement</span>
-                <span className="sds-canvas-tab">Battery Placement</span>
-                <span className="sds-canvas-tab">Shading Analysis</span>
-                <span className="sds-canvas-tab">Production Estimate</span>
+              <div className="sds-canvas-controls-row">
+                <input type="file" accept="image/*" onChange={handleImageUpload} />
+                <span className="sds-canvas-control-label">Upload Roof/Satellite Image</span>
+                <span className="sds-canvas-control-label">Compass: <span className="sds-compass">N E S W</span></span>
               </div>
-              <div className="sds-canvas-box">Design canvas placeholder</div>
+              <div
+                className="sds-canvas-box"
+                ref={canvasRef}
+                tabIndex={0}
+                style={{ position: "relative", cursor: showPanels ? "pointer" : "default", background: bgImage ? `url(${bgImage}) center/cover no-repeat` : "#e9ecf5" }}
+                onMouseDown={onCanvasMouseDown}
+                onMouseMove={onCanvasMouseMove}
+                onMouseUp={onCanvasMouseUp}
+              >
+                {/* Panels */}
+                {showPanels && panels.map((p) => (
+                  <div
+                    key={p.id}
+                    className={"sds-panel" + (selectedPanel === p.id ? " selected" : "")}
+                    style={{
+                      position: "absolute",
+                      left: p.x,
+                      top: p.y,
+                      width: p.width,
+                      height: p.height,
+                      background: selectedPanel === p.id ? "#fbb040" : "#2b3990",
+                      opacity: 0.92,
+                      border: selectedPanel === p.id ? "2px solid #fbb040" : "2px solid #fff",
+                      borderRadius: 6,
+                      transform: `rotate(${p.rotation}deg)`
+                    }}
+                    onClick={e => { e.stopPropagation(); selectPanel(p.id); }}
+                  >
+                    <span className="sds-panel-label">{p.model.split(" ")[0]}</span>
+                  </div>
+                ))}
+                {/* Layer Placeholders */}
+                {showIrradiance && <div className="sds-layer-placeholder">Irradiance Layer (placeholder)</div>}
+                {showObstructions && <div className="sds-layer-placeholder">Obstructions (placeholder)</div>}
+                {showSetbacks && <div className="sds-layer-placeholder">Setbacks (placeholder)</div>}
+              </div>
+              {/* Panel Actions */}
+              {selectedPanel && (
+                <div className="sds-panel-actions">
+                  <button type="button" onClick={() => movePanel(-10, 0)}>←</button>
+                  <button type="button" onClick={() => movePanel(10, 0)}>→</button>
+                  <button type="button" onClick={() => movePanel(0, -10)}>↑</button>
+                  <button type="button" onClick={() => movePanel(0, 10)}>↓</button>
+                  <button type="button" onClick={rotatePanel}>Rotate</button>
+                  <button type="button" onClick={deletePanel}>Delete</button>
+                </div>
+              )}
             </div>
           </section>
 
@@ -76,7 +297,36 @@ export default function SolarDesignStudio() {
           <section className="sds-right-panels">
             <div className="sds-info-card card">
               <div className="sds-info-title">Equipment Selection</div>
-              <div className="sds-info-content">Panels, Inverters, Batteries, etc.</div>
+              <div className="sds-info-content">
+                <div>
+                  <label>Panel Model: </label>
+                  <select value={panelModel} onChange={handlePanelModel}>
+                    {PANEL_MODELS.map((m) => (
+                      <option key={m.label} value={m.label}>{m.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label>Wattage: </label>
+                  <input type="number" value={panelWattage} min={100} max={700} step={5} onChange={e => setPanelWattage(Number(e.target.value))} style={{width:60}} />
+                </div>
+                <div>
+                  <label>Inverter: </label>
+                  <select value={inverter} onChange={e => setInverter(e.target.value)}>
+                    {INVERTERS.map((i) => (
+                      <option key={i} value={i}>{i}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label>Battery: </label>
+                  <select value={battery} onChange={e => setBattery(e.target.value)}>
+                    {BATTERIES.map((b) => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
             <div className="sds-info-card card">
               <div className="sds-info-title">Financing Summary</div>
@@ -87,219 +337,58 @@ export default function SolarDesignStudio() {
       </main>
 
       <style jsx>{`
-        .sds-root {
+        .sds-panel {
           display: flex;
-          min-height: 100vh;
-          background: #f4f6fa;
-        }
-        .sds-sidebar {
-          width: 80px;
-          background: #232a47;
-          color: #fff;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          padding: 2.2rem 0.5rem 1.2rem 0.5rem;
-          gap: 1.5rem;
-        }
-        .sds-sidebar-header {
-          font-size: 1.1rem;
-          font-weight: 700;
-          color: #fbb040;
-          margin-bottom: 0.7rem;
-        }
-        .sds-sidebar-nav {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-        }
-        .sds-sidebar-btn {
-          background: none;
-          border: none;
-          color: #fff;
-          font-size: 1.05rem;
-          padding: 0.6em 0.2em;
-          border-radius: 7px;
-          transition: background 0.18s, color 0.18s;
-        }
-        .sds-sidebar-btn:hover {
-          background: #2b3990;
-          color: #fbb040;
-        }
-        .sds-main {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          min-width: 0;
-        }
-        .sds-toolbar {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 1.2rem 2.2rem;
-          margin-bottom: 1.2rem;
-        }
-        .sds-toolbar-title-row {
-          display: flex;
-          align-items: center;
-          gap: 0.7rem;
-        }
-        .sds-toolbar-title {
-          font-size: 1.45rem;
-          font-weight: 700;
-          color: #2b3990;
-        }
-        .sds-toolbar-actions {
-          display: flex;
-          gap: 0.7rem;
-        }
-        .sds-toolbar-btn {
-          border-radius: 7px;
-          font-weight: 600;
-          font-size: 0.97rem;
-          padding: 0.5em 1em;
-          border: none;
-          background: #2b3990;
-          color: #fff;
-          box-shadow: 0 1px 4px rgba(43,57,144,0.04);
-          transition: background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s;
-        }
-        .sds-toolbar-btn:active {
-          background: #1a1d2e;
-          color: #fff;
-          transform: scale(0.97);
-        }
-        .sds-workspace {
-          display: flex;
-          flex: 1;
-          min-width: 0;
-          gap: 1.2rem;
-        }
-        .sds-info-panels {
-          display: flex;
-          flex-direction: column;
-          gap: 1.1rem;
-          min-width: 220px;
-          max-width: 260px;
-        }
-        .sds-info-card {
-          padding: 1.1rem 1.1rem 0.7rem 1.1rem;
-        }
-        .sds-info-title {
-          font-size: 1.07rem;
-          font-weight: 700;
-          color: #2b3990;
-          margin-bottom: 0.3em;
-        }
-        .sds-info-content {
-          color: #222;
-          font-size: 0.98rem;
-        }
-        .sds-canvas-section {
-          flex: 1;
-          min-width: 0;
-          display: flex;
-          flex-direction: column;
           align-items: center;
           justify-content: center;
-        }
-        .sds-canvas-placeholder {
-          width: 100%;
-          max-width: 600px;
-          background: #fff;
-          border-radius: 18px;
-          box-shadow: 0 2px 12px rgba(43,57,144,0.07);
-          padding: 2.2rem 1.2rem 2.2rem 1.2rem;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-        }
-        .sds-canvas-label {
-          font-size: 1.13rem;
+          color: #fff;
           font-weight: 700;
-          color: #2b3990;
+          font-size: 0.95rem;
+          cursor: pointer;
+          user-select: none;
+        }
+        .sds-panel.selected {
+          box-shadow: 0 0 0 3px #fbb04055;
+        }
+        .sds-panel-label {
+          pointer-events: none;
+        }
+        .sds-panel-actions {
+          display: flex;
+          gap: 0.4em;
+          margin-top: 0.7em;
+        }
+        .sds-canvas-controls-row {
+          display: flex;
+          align-items: center;
+          gap: 1.1em;
           margin-bottom: 0.7em;
         }
-        .sds-canvas-tabs {
-          display: flex;
-          gap: 0.7rem;
-          margin-bottom: 1.1em;
-          flex-wrap: wrap;
+        .sds-canvas-control-label {
+          color: #2b3990;
+          font-size: 0.98rem;
         }
-        .sds-canvas-tab {
+        .sds-compass {
+          background: #e9ecf5;
+          border-radius: 7px;
+          padding: 0.1em 0.7em;
+          font-weight: 600;
+          color: #2b3990;
+        }
+        .sds-layer-placeholder {
+          position: absolute;
+          left: 10px;
+          top: 10px;
           background: #fbb040;
           color: #232a47;
+          padding: 0.3em 1em;
           border-radius: 7px;
-          padding: 0.3em 0.9em;
-          font-weight: 600;
-          font-size: 0.97rem;
+          font-weight: 700;
+          font-size: 1.01rem;
+          opacity: 0.93;
         }
-        .sds-canvas-box {
-          width: 100%;
-          min-height: 220px;
-          background: #e9ecf5;
-          border-radius: 12px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: #888;
-          font-size: 1.13rem;
-          font-weight: 500;
-        }
-        .sds-right-panels {
-          display: flex;
-          flex-direction: column;
-          gap: 1.1rem;
-          min-width: 220px;
-          max-width: 260px;
-        }
-        @media (max-width: 1200px) {
-          .sds-info-panels, .sds-right-panels {
-            min-width: 160px;
-            max-width: 200px;
-          }
-        }
-        @media (max-width: 900px) {
-          .sds-root {
-            flex-direction: column;
-          }
-          .sds-sidebar {
-            flex-direction: row;
-            width: 100vw;
-            height: 60px;
-            padding: 0.5rem 0.5rem;
-            gap: 1.2rem;
-            justify-content: center;
-            align-items: center;
-          }
-          .sds-sidebar-header {
-            display: none;
-          }
-          .sds-main {
-            padding: 0.5rem 0.2rem;
-          }
-          .sds-workspace {
-            flex-direction: column;
-            gap: 0.7rem;
-          }
-          .sds-info-panels, .sds-right-panels {
-            flex-direction: row;
-            min-width: 0;
-            max-width: 100vw;
-            gap: 0.7rem;
-          }
-          .sds-info-card {
-            flex: 1;
-            min-width: 0;
-          }
-        }
-        @media (max-width: 600px) {
-          .sds-canvas-placeholder {
-            padding: 1.1rem 0.3rem 1.1rem 0.3rem;
-          }
-          .card {
-            padding: 1.1rem 0.7rem 1.1rem 0.7rem;
-          }
+        .sds-placeholder {
+          color: #b0b6d1;
         }
       `}</style>
     </div>
