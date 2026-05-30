@@ -1,4 +1,5 @@
 import React, { useRef, useState } from "react";
+import { supabase } from "../utils/supabaseClient";
 
 const DEFAULT_PANEL = {
   width: 80,
@@ -20,6 +21,10 @@ function getSystemSizeKw(panels, wattage) {
 }
 
 export default function SolarDesignStudio() {
+  // Save state
+  const [projectName, setProjectName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState(null);
   // Canvas state
   const [bgImage, setBgImage] = useState(null);
   const [panels, setPanels] = useState([]);
@@ -168,12 +173,61 @@ export default function SolarDesignStudio() {
     dragData.current = { dragging: false, offsetX: 0, offsetY: 0, id: null };
   }
 
+
   // Calculations
   const panelCount = panels.length;
   const systemSize = getSystemSizeKw(panelCount, panelWattage);
+  const estimatedProduction = "(placeholder)";
+  const estimatedOffset = "(placeholder)";
+
+  // Save to Supabase
+  async function handleSaveDesign() {
+    if (!projectName) {
+      setToast("Please enter a project name.");
+      setTimeout(() => setToast(null), 2000);
+      return;
+    }
+    setSaving(true);
+    setToast(null);
+    const layout_json = {
+      panels,
+      selectedPanel,
+      bgImage: !bgImage?.startsWith("http") ? bgImage : undefined,
+      showPanels,
+      showObstructions,
+      showIrradiance,
+      showSetbacks,
+      panelModel,
+      panelWattage,
+      inverter,
+      battery,
+    };
+    const payload = {
+      project_name: projectName,
+      roof_image_url: bgImage?.startsWith("http") ? bgImage : null,
+      panel_model: panelModel,
+      panel_wattage: panelWattage,
+      inverter_model: inverter,
+      battery_model: battery,
+      panel_count: panelCount,
+      system_size_kw: systemSize,
+      estimated_production: estimatedProduction,
+      estimated_offset: estimatedOffset,
+      layout_json,
+    };
+    const { error } = await supabase.from("solar_designs").insert([payload]);
+    setSaving(false);
+    if (error) {
+      setToast("Error saving design: " + error.message);
+    } else {
+      setToast("Design saved!");
+    }
+    setTimeout(() => setToast(null), 2500);
+  }
 
   return (
     <div className="sds-root">
+      {toast && <div className="dashboard-toast" style={{position:'fixed',top:10,right:10,zIndex:1000}}>{toast}</div>}
       {/* Left Sidebar */}
       <aside className="sds-sidebar">
         <div className="sds-sidebar-header">Tools</div>
@@ -189,6 +243,19 @@ export default function SolarDesignStudio() {
 
       {/* Main Workspace */}
       <main className="sds-main">
+        {/* Project Name Input */}
+        <div className="sds-project-name-row card" style={{marginBottom:16,display:'flex',alignItems:'center',gap:12}}>
+          <label htmlFor="projectName" style={{fontWeight:600,color:'#2b3990'}}>Project Name:</label>
+          <input
+            id="projectName"
+            type="text"
+            value={projectName}
+            onChange={e => setProjectName(e.target.value)}
+            style={{fontSize:'1.07rem',padding:'0.4em 1em',borderRadius:7,border:'1px solid #b0b6d1',flex:1,maxWidth:320}}
+            placeholder="e.g. Smith Residence"
+            disabled={saving}
+          />
+        </div>
         {/* Header/Toolbar */}
         <header className="sds-toolbar card">
           <div className="sds-toolbar-title-row">
@@ -199,10 +266,10 @@ export default function SolarDesignStudio() {
             <span className="sds-toolbar-title">Solar Design Studio</span>
           </div>
           <div className="sds-toolbar-actions">
-            <button className="sds-toolbar-btn" type="button" onClick={addPanel}>Add Panel</button>
-            <button className="sds-toolbar-btn" type="button" onClick={duplicateRow} disabled={!selectedPanel}>Duplicate Row</button>
-            <button className="sds-toolbar-btn" type="button" onClick={clearLayout} disabled={panels.length === 0}>Clear Layout</button>
-            <button className="sds-toolbar-btn" type="button" disabled>Save Design</button>
+            <button className="sds-toolbar-btn" type="button" onClick={addPanel} disabled={saving}>Add Panel</button>
+            <button className="sds-toolbar-btn" type="button" onClick={duplicateRow} disabled={!selectedPanel || saving}>Duplicate Row</button>
+            <button className="sds-toolbar-btn" type="button" onClick={clearLayout} disabled={panels.length === 0 || saving}>Clear Layout</button>
+            <button className="sds-toolbar-btn" type="button" onClick={handleSaveDesign} disabled={saving}>{saving ? "Saving..." : "Save Design"}</button>
             <button className="sds-toolbar-btn" type="button" disabled>Export</button>
           </div>
         </header>
