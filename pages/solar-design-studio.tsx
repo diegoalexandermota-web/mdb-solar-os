@@ -1,5 +1,8 @@
+
 import React, { useRef, useState, useEffect } from "react";
 import { supabase } from "../utils/supabaseClient";
+import { useRouter } from 'next/router';
+
 
 const DEFAULT_PANEL = {
   width: 80,
@@ -21,6 +24,14 @@ function getSystemSizeKw(panels, wattage) {
 }
 
 export default function SolarDesignStudio() {
+  const router = useRouter();
+  // Lead/Proposal selectors
+  const [leadId, setLeadId] = useState("");
+  const [proposalId, setProposalId] = useState("");
+  const [leads, setLeads] = useState([]);
+  const [proposals, setProposals] = useState([]);
+  const [loadingLeads, setLoadingLeads] = useState(false);
+  const [loadingProposals, setLoadingProposals] = useState(false);
   // Load state
   const [savedDesigns, setSavedDesigns] = useState([]);
   const [loadingDesigns, setLoadingDesigns] = useState(false);
@@ -71,6 +82,9 @@ export default function SolarDesignStudio() {
       } else {
         setSelectedPanel(null);
       }
+      // Show linked lead/proposal if present
+      if (design.lead_id) setLeadId(design.lead_id);
+      if (design.proposal_id) setProposalId(design.proposal_id);
       setToast("Design loaded!");
     } catch (e) {
       setLoadError("Failed to load design: " + (e.message || e));
@@ -271,6 +285,8 @@ export default function SolarDesignStudio() {
       estimated_production: estimatedProduction,
       estimated_offset: estimatedOffset,
       layout_json,
+      lead_id: leadId || null,
+      proposal_id: proposalId || null,
     };
     const { error } = await supabase.from("solar_designs").insert([payload]);
     setSaving(false);
@@ -316,12 +332,18 @@ export default function SolarDesignStudio() {
                     <button
                       className="sds-toolbar-btn"
                       type="button"
-                      style={{minWidth:70}}
+                      style={{minWidth:70,marginRight:6}}
                       onClick={() => handleLoadDesign(design)}
                       disabled={!!loadingDesignId}
                     >
                       {loadingDesignId === design.id ? "Loading..." : "Load"}
                     </button>
+                    {design.lead_id && (
+                      <button className="sds-toolbar-btn" type="button" style={{minWidth:70,marginRight:6}} onClick={() => router.push(`/leads/${design.lead_id}`)}>Open Lead</button>
+                    )}
+                    {design.proposal_id && (
+                      <button className="sds-toolbar-btn" type="button" style={{minWidth:70}} onClick={() => router.push(`/proposals/${design.proposal_id}`)}>Open Proposal</button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -343,18 +365,44 @@ export default function SolarDesignStudio() {
 
       {/* Main Workspace */}
       <main className="sds-main">
-        {/* Project Name Input */}
-        <div className="sds-project-name-row card" style={{marginBottom:16,display:'flex',alignItems:'center',gap:12}}>
+        {/* Project Name & Lead/Proposal Selectors */}
+        <div className="sds-project-name-row card" style={{marginBottom:16,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
           <label htmlFor="projectName" style={{fontWeight:600,color:'#2b3990'}}>Project Name:</label>
           <input
             id="projectName"
             type="text"
             value={projectName}
             onChange={e => setProjectName(e.target.value)}
-            style={{fontSize:'1.07rem',padding:'0.4em 1em',borderRadius:7,border:'1px solid #b0b6d1',flex:1,maxWidth:320}}
+            style={{fontSize:'1.07rem',padding:'0.4em 1em',borderRadius:7,border:'1px solid #b0b6d1',flex:1,maxWidth:220}}
             placeholder="e.g. Smith Residence"
             disabled={saving || !!loadingDesignId}
           />
+          <label htmlFor="leadSelect" style={{fontWeight:600,color:'#2b3990'}}>Lead:</label>
+          <select
+            id="leadSelect"
+            value={leadId}
+            onChange={e => setLeadId(e.target.value)}
+            disabled={loadingLeads || !!loadingDesignId}
+            style={{minWidth:120,maxWidth:180}}
+          >
+            <option value="">None</option>
+            {leads.map(l => (
+              <option key={l.id} value={l.id}>{l.name}</option>
+            ))}
+          </select>
+          <label htmlFor="proposalSelect" style={{fontWeight:600,color:'#2b3990'}}>Proposal:</label>
+          <select
+            id="proposalSelect"
+            value={proposalId}
+            onChange={e => setProposalId(e.target.value)}
+            disabled={loadingProposals || !!loadingDesignId}
+            style={{minWidth:120,maxWidth:180}}
+          >
+            <option value="">None</option>
+            {proposals.map(p => (
+              <option key={p.id} value={p.id}>{p.title || p.id}</option>
+            ))}
+          </select>
         </div>
         {/* Header/Toolbar */}
         <header className="sds-toolbar card">

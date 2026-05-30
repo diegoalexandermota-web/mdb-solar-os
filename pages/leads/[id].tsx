@@ -6,8 +6,11 @@ import AIAssistantPanel from '../../components/AIAssistantPanel';
 import EditLeadModal from '../../components/EditLeadModal';
 import TaskModal from '../../components/TaskModal';
 import { useRouter } from 'next/router';
-import { useEffect, useState } from 'react';
 import { supabase } from '../../utils/supabaseClient';
+import { useState, useEffect } from 'react';
+import RelatedSolarDesigns from '../../components/RelatedSolarDesigns';
+
+
 
 export default function LeadDetail() {
   const router = useRouter();
@@ -191,12 +194,18 @@ export default function LeadDetail() {
         </div>
       </div>
 
-      {/* Proposal Shortcut Card */}
-      <div className="lead-proposal-shortcut card">
-        <div className="lead-proposal-title">Proposal</div>
-        <div className="lead-proposal-desc">Quick access to proposal and documents (coming soon).</div>
-        <button className="lead-action-btn proposal" onClick={() => setToast('Coming soon.')}>View Proposal</button>
+
+      {/* Solar Design Actions */}
+      <div className="lead-solar-design-actions card">
+        <div className="lead-proposal-title">Solar Designs</div>
+        <div style={{marginBottom:8}}>Create or view solar designs for this lead.</div>
+        <button className="lead-action-btn proposal" onClick={() => router.push(`/solar-design-studio?lead_id=${leadId}`)}>Create Solar Design</button>
       </div>
+
+
+      {/* Related Solar Designs */}
+      {<RelatedSolarDesigns leadId={leadId} />}
+
 
       {/* Notes & Tasks Section */}
       <div className="lead-tasks-section card">

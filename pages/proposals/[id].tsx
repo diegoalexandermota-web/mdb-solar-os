@@ -1,3 +1,4 @@
+import RelatedSolarDesigns from '../../components/RelatedSolarDesigns';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../../utils/supabaseClient';
@@ -234,12 +235,23 @@ export default function ProposalBuilder() {
 
       {/* AI Proposal Assistant Panel */}
       <div className="proposal-ai-panel card">
+
         <div className="proposal-ai-title-row">
           <span className="proposal-ai-title">MDB AI Proposal Summary</span>
           <button className="proposal-action-btn" onClick={handleAISummary}>Generate AI Summary</button>
         </div>
         <div className="proposal-ai-summary">{aiSummary}</div>
       </div>
+
+      {/* Solar Design Actions */}
+      <div className="proposal-solar-design-actions card">
+        <div className="proposal-customer-title">Solar Designs</div>
+        <div style={{marginBottom:8}}>Attach or create a solar design for this proposal.</div>
+        <button className="proposal-action-btn" onClick={() => router.push(`/solar-design-studio?proposal_id=${id}`)}>Attach/Create Solar Design</button>
+      </div>
+
+      {/* Related Solar Designs */}
+      <RelatedSolarDesigns proposalId={Array.isArray(id) ? id[0] : id} />
 
       {/* Proposal Actions Bar */}
       <div className="proposal-actions-bar card">
@@ -253,6 +265,8 @@ export default function ProposalBuilder() {
           <button className="proposal-action-btn" onClick={() => setToast('PDF export coming soon.')}>Export PDF</button>
         </div>
       </div>
+
+
 
       <style jsx>{`
         .proposal-root {
