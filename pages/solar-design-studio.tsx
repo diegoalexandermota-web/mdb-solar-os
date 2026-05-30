@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { supabase } from "../utils/supabaseClient";
 
 const DEFAULT_PANEL = {
@@ -21,6 +21,63 @@ function getSystemSizeKw(panels, wattage) {
 }
 
 export default function SolarDesignStudio() {
+  // Load state
+  const [savedDesigns, setSavedDesigns] = useState([]);
+  const [loadingDesigns, setLoadingDesigns] = useState(false);
+  const [loadingDesignId, setLoadingDesignId] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+
+  // Fetch saved designs on mount
+  useEffect(() => {
+    async function fetchDesigns() {
+      setLoadingDesigns(true);
+      setLoadError(null);
+      const { data, error } = await supabase
+        .from("solar_designs")
+        .select("id, project_name, panel_count, system_size_kw, updated_at, layout_json")
+        .order("updated_at", { ascending: false });
+      if (error) {
+        setLoadError("Error loading designs: " + error.message);
+        setSavedDesigns([]);
+      } else {
+        setSavedDesigns(data || []);
+      }
+      setLoadingDesigns(false);
+    }
+    fetchDesigns();
+  }, []);
+
+  // Load a saved design
+  async function handleLoadDesign(design) {
+    setLoadingDesignId(design.id);
+    setToast(null);
+    setLoadError(null);
+    try {
+      // Defensive: parse layout_json
+      const layout = typeof design.layout_json === "string" ? JSON.parse(design.layout_json) : design.layout_json;
+      setPanels(layout.panels || []);
+      setBgImage(layout.bgImage || "");
+      setShowPanels(layout.showPanels ?? true);
+      setShowObstructions(layout.showObstructions ?? true);
+      setShowIrradiance(layout.showIrradiance ?? false);
+      setShowSetbacks(layout.showSetbacks ?? false);
+      setPanelModel(layout.panelModel || PANEL_MODELS[0].label);
+      setPanelWattage(layout.panelWattage || PANEL_MODELS[0].wattage);
+      setInverter(layout.inverter || INVERTERS[0]);
+      setBattery(layout.battery || BATTERIES[0]);
+      // Restore selected panel if valid
+      if (layout.selectedPanel && (layout.panels || []).some((p) => p.id === layout.selectedPanel)) {
+        setSelectedPanel(layout.selectedPanel);
+      } else {
+        setSelectedPanel(null);
+      }
+      setToast("Design loaded!");
+    } catch (e) {
+      setLoadError("Failed to load design: " + (e.message || e));
+    }
+    setLoadingDesignId(null);
+    setTimeout(() => setToast(null), 2000);
+  }
   // Save state
   const [projectName, setProjectName] = useState("");
   const [saving, setSaving] = useState(false);
@@ -228,7 +285,50 @@ export default function SolarDesignStudio() {
   return (
     <div className="sds-root">
       {toast && <div className="dashboard-toast" style={{position:'fixed',top:10,right:10,zIndex:1000}}>{toast}</div>}
-      {/* Left Sidebar */}
+      {/* Saved Designs Panel */}
+      <div className="sds-saved-designs card" style={{marginBottom:20,padding:16,maxWidth:600}}>
+        <div style={{fontWeight:700,fontSize:'1.1rem',color:'#2b3990',marginBottom:8}}>Saved Designs</div>
+        {loadingDesigns ? (
+          <div>Loading designs...</div>
+        ) : loadError ? (
+          <div style={{color:'#c00'}}>{loadError}</div>
+        ) : savedDesigns.length === 0 ? (
+          <div>No saved designs found.</div>
+        ) : (
+          <table style={{width:'100%',fontSize:'0.97rem',borderCollapse:'collapse'}}>
+            <thead>
+              <tr style={{background:'#f6f8fa'}}>
+                <th style={{textAlign:'left',padding:'6px 8px'}}>Project</th>
+                <th style={{textAlign:'right',padding:'6px 8px'}}>Panels</th>
+                <th style={{textAlign:'right',padding:'6px 8px'}}>Size (kW)</th>
+                <th style={{textAlign:'right',padding:'6px 8px'}}>Updated</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {savedDesigns.map(design => (
+                <tr key={design.id} style={{borderBottom:'1px solid #eee'}}>
+                  <td style={{padding:'6px 8px'}}>{design.project_name}</td>
+                  <td style={{padding:'6px 8px',textAlign:'right'}}>{design.panel_count}</td>
+                  <td style={{padding:'6px 8px',textAlign:'right'}}>{design.system_size_kw}</td>
+                  <td style={{padding:'6px 8px',textAlign:'right'}}>{design.updated_at ? new Date(design.updated_at).toLocaleString() : "-"}</td>
+                  <td style={{padding:'6px 8px',textAlign:'right'}}>
+                    <button
+                      className="sds-toolbar-btn"
+                      type="button"
+                      style={{minWidth:70}}
+                      onClick={() => handleLoadDesign(design)}
+                      disabled={!!loadingDesignId}
+                    >
+                      {loadingDesignId === design.id ? "Loading..." : "Load"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
       <aside className="sds-sidebar">
         <div className="sds-sidebar-header">Tools</div>
         <nav className="sds-sidebar-nav">
@@ -253,7 +353,7 @@ export default function SolarDesignStudio() {
             onChange={e => setProjectName(e.target.value)}
             style={{fontSize:'1.07rem',padding:'0.4em 1em',borderRadius:7,border:'1px solid #b0b6d1',flex:1,maxWidth:320}}
             placeholder="e.g. Smith Residence"
-            disabled={saving}
+            disabled={saving || !!loadingDesignId}
           />
         </div>
         {/* Header/Toolbar */}
@@ -266,10 +366,10 @@ export default function SolarDesignStudio() {
             <span className="sds-toolbar-title">Solar Design Studio</span>
           </div>
           <div className="sds-toolbar-actions">
-            <button className="sds-toolbar-btn" type="button" onClick={addPanel} disabled={saving}>Add Panel</button>
-            <button className="sds-toolbar-btn" type="button" onClick={duplicateRow} disabled={!selectedPanel || saving}>Duplicate Row</button>
-            <button className="sds-toolbar-btn" type="button" onClick={clearLayout} disabled={panels.length === 0 || saving}>Clear Layout</button>
-            <button className="sds-toolbar-btn" type="button" onClick={handleSaveDesign} disabled={saving}>{saving ? "Saving..." : "Save Design"}</button>
+            <button className="sds-toolbar-btn" type="button" onClick={addPanel} disabled={saving || !!loadingDesignId}>Add Panel</button>
+            <button className="sds-toolbar-btn" type="button" onClick={duplicateRow} disabled={!selectedPanel || saving || !!loadingDesignId}>Duplicate Row</button>
+            <button className="sds-toolbar-btn" type="button" onClick={clearLayout} disabled={panels.length === 0 || saving || !!loadingDesignId}>Clear Layout</button>
+            <button className="sds-toolbar-btn" type="button" onClick={handleSaveDesign} disabled={saving || !!loadingDesignId}>{saving ? "Saving..." : "Save Design"}</button>
             <button className="sds-toolbar-btn" type="button" disabled>Export</button>
           </div>
         </header>
