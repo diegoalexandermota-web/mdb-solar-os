@@ -113,8 +113,7 @@ export default function SolarDesignStudio() {
   async function handleGenerateAISummary() {
     setAiLoading(true);
     setAiSummary(null);
-    // Simulate AI summary generation
-    const summary = generateSolarProposalSummary({
+    const input = {
       panel_count: panels.length,
       system_size_kw: Number(getSystemSizeKw(panels.length, panelWattage)),
       estimated_production: "(placeholder)",
@@ -122,9 +121,53 @@ export default function SolarDesignStudio() {
       panel_model: panelModel,
       inverter_model: inverter,
       battery_model: battery,
-    });
+    };
+    const summary = generateSolarProposalSummary(input);
     setAiSummary(summary.executive_summary + "\n" + summary.homeowner_benefit + "\n" + summary.financing_summary);
     setAiLoading(false);
+  }
+
+  // Save AI Summary Handler
+  async function handleSaveAISummary() {
+    if (!aiSummary) {
+      setToast("Generate an AI summary first.");
+      setTimeout(() => setToast(null), 2000);
+      return;
+    }
+    if (!proposalId) {
+      setToast("Link a proposal to save this summary.");
+      setTimeout(() => setToast(null), 2500);
+      return;
+    }
+    setToast("Saving AI summary...");
+    try {
+      // Save to proposals
+      await supabase.from("proposals").update({ ai_summary: aiSummary }).eq("id", proposalId);
+      // Save to ai_logs
+      const input = {
+        panel_count: panels.length,
+        system_size_kw: Number(getSystemSizeKw(panels.length, panelWattage)),
+        estimated_production: "(placeholder)",
+        estimated_offset: "(placeholder)",
+        panel_model: panelModel,
+        inverter_model: inverter,
+        battery_model: battery,
+      };
+      await supabase.from("ai_logs").insert([
+        {
+          proposal_id: proposalId,
+          action: "solar_proposal_summary",
+          context: null,
+          user_id: null,
+          input_json: input,
+          output_json: { ai_summary: aiSummary },
+        },
+      ]);
+      setToast("AI summary saved to proposal!");
+    } catch (e) {
+      setToast("Error saving AI summary.");
+    }
+    setTimeout(() => setToast(null), 2500);
   }
 
   // UI: Main Render
@@ -183,6 +226,9 @@ export default function SolarDesignStudio() {
         <div className="sds-summary-panel">
           <button className="sds-ai-btn" onClick={handleGenerateAISummary} disabled={aiLoading}>
             {aiLoading ? "Generating..." : "Generate AI Proposal Summary"}
+          </button>
+          <button className="sds-ai-btn" onClick={handleSaveAISummary} disabled={!aiSummary} style={{marginLeft:8}}>
+            Save AI Summary
           </button>
           {aiSummary && (
             <div className="sds-ai-summary">
