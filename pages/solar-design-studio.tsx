@@ -2,14 +2,8 @@ import React, { useRef, useState, useEffect } from "react";
 import { useRouter } from 'next/router';
 import { supabase } from "../utils/supabaseClient";
 import { generateSolarProposalSummary } from '../utils/generateSolarProposalSummary';
+import { generateProposalPDF } from '../utils/generateProposalPDF';
 
-const DEFAULT_PANEL = {
-  width: 80,
-  height: 40,
-  rotation: 0,
-  model: "SunPower SPR-X22-360",
-  wattage: 400,
-};
 const PANEL_MODELS = [
   { label: "SunPower SPR-X22-360", wattage: 400 },
   { label: "REC Alpha Pure-R", wattage: 410 },
@@ -23,6 +17,7 @@ function getSystemSizeKw(panelCount: number, wattage: number) {
 }
 
 export default function SolarDesignStudio() {
+  const [pdfLoading, setPdfLoading] = useState(false);
   // --- All React hooks and state at the top ---
   const router = useRouter();
   const dragData = useRef<{ dragging: boolean; offsetX: number; offsetY: number; id: number | null }>({ dragging: false, offsetX: 0, offsetY: 0, id: null });
@@ -36,6 +31,38 @@ export default function SolarDesignStudio() {
   const [showSetbacks, setShowSetbacks] = useState(false);
   const [bgImage, setBgImage] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+
+
+
+
+  // PDF Generation Handler (must be after all hooks)
+  function handleGeneratePDF() {
+    setPdfLoading(true);
+    try {
+      const data = {
+        customer_name: "", // Not available in studio
+        address: "", // Not available in studio
+        utility_company: "", // Not available in studio
+        system_size_kw: getSystemSizeKw(panels.length, panelWattage),
+        panel_count: panels.length,
+        estimated_production: "(placeholder)",
+        estimated_offset: "(placeholder)",
+        financing_summary: aiSummary?.split('Financing options are available')[0]?.trim() || '',
+        ai_executive_summary: aiSummary?.split('\n')[0] || '',
+        homeowner_benefit: aiSummary?.split('\n')[1] || '',
+        next_step: 'Contact your MDB Solar advisor to review your proposal and finalize your solar journey.',
+        proposal_date: new Date().toLocaleDateString(),
+      };
+      const doc = generateProposalPDF(data);
+      doc.save(`MDB_Solar_Proposal.pdf`);
+      setToast('Proposal PDF generated!');
+    } catch (e) {
+      setToast('Error generating PDF.');
+    }
+    setPdfLoading(false);
+    setTimeout(() => setToast(null), 2500);
+  }
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [leadId, setLeadId] = useState("");
@@ -229,6 +256,9 @@ export default function SolarDesignStudio() {
           </button>
           <button className="sds-ai-btn" onClick={handleSaveAISummary} disabled={!aiSummary} style={{marginLeft:8}}>
             Save AI Summary
+          </button>
+          <button className="sds-ai-btn" onClick={handleGeneratePDF} disabled={pdfLoading || !aiSummary} style={{marginLeft:8}}>
+            {pdfLoading ? 'Generating PDF...' : 'Generate Proposal PDF'}
           </button>
           {aiSummary && (
             <div className="sds-ai-summary">

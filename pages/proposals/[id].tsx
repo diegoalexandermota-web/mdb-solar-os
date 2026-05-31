@@ -1,4 +1,5 @@
 import { generateSolarProposalSummary } from '../../utils/generateSolarProposalSummary';
+import { generateProposalPDF } from '../../utils/generateProposalPDF';
 import RelatedSolarDesigns from '../../components/RelatedSolarDesigns';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
@@ -35,6 +36,34 @@ export default function ProposalBuilder() {
   const [toast, setToast] = useState<string|null>(null);
   const [aiSummary, setAiSummary] = useState('');
   const [linkedDesign, setLinkedDesign] = useState<any>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  function handleGeneratePDF() {
+    setPdfLoading(true);
+    try {
+      // Gather data from proposal, linkedDesign, and AI summary
+      const data = {
+        customer_name: lead?.name || proposal?.customer_name || '',
+        address: lead?.address || proposal?.address || '',
+        utility_company: lead?.utility_company || proposal?.utility_company || '',
+        system_size_kw: linkedDesign?.system_size_kw || proposal?.system_size_kw || '',
+        panel_count: linkedDesign?.panel_count || proposal?.panel_count || '',
+        estimated_production: linkedDesign?.estimated_production || proposal?.estimated_production || '',
+        estimated_offset: linkedDesign?.estimated_offset || proposal?.estimated_offset || '',
+        financing_summary: aiSummary.split('Financing options are available')[0]?.trim() || '',
+        ai_executive_summary: aiSummary.split('\n')[0] || '',
+        homeowner_benefit: aiSummary.split('\n')[1] || '',
+        next_step: 'Contact your MDB Solar advisor to review your proposal and finalize your solar journey.',
+        proposal_date: new Date().toLocaleDateString(),
+      };
+      const doc = generateProposalPDF(data);
+      doc.save(`MDB_Solar_Proposal_${data.customer_name || 'Customer'}.pdf`);
+      setToast('Proposal PDF generated!');
+    } catch (e) {
+      setToast('Error generating PDF.');
+    }
+    setPdfLoading(false);
+    setTimeout(() => setToast(null), 2500);
+  }
 
   useEffect(() => {
     async function fetchLinkedDesign() {
@@ -305,6 +334,9 @@ export default function ProposalBuilder() {
           <button className="proposal-action-btn" onClick={() => handleAISummary(true)}>Generate AI Summary</button>
           <button className="proposal-action-btn" onClick={() => handleAISummary(true)}>Regenerate</button>
           <button className="proposal-action-btn" onClick={handleCopySummary} disabled={!aiSummary}>Copy Summary</button>
+          <button className="proposal-action-btn" onClick={handleGeneratePDF} disabled={pdfLoading || !aiSummary} style={{marginLeft:8}}>
+            {pdfLoading ? 'Generating PDF...' : 'Generate Proposal PDF'}
+          </button>
         </div>
         <div className="proposal-ai-summary" style={{whiteSpace:'pre-line'}}>{aiSummary}</div>
       </div>
