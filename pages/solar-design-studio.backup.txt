@@ -1,0 +1,46 @@
+import React, { useRef, useState, useEffect } from "react";
+import { useRouter } from 'next/router';
+import { supabase } from "../utils/supabaseClient";
+import { generateSolarProposalSummary } from '../lib/ai/generateSolarProposalSummary';
+
+const DEFAULT_PANEL = {
+  width: 80,
+  height: 40,
+  rotation: 0,
+  model: "SunPower SPR-X22-360",
+};
+      const [selectedPanel, setSelectedPanel] = useState<number | null>(null);
+      const [showPanels, setShowPanels] = useState(true);
+      const [showObstructions, setShowObstructions] = useState(false);
+      const [showIrradiance, setShowIrradiance] = useState(false);
+      const [showSetbacks, setShowSetbacks] = useState(false);
+      // Duplicate state declarations removed for build compatibility.
+      // Duplicate state declarations removed for build compatibility.
+      // Duplicate state declaration removed for build compatibility.
+      // const [panelModel, setPanelModel] = useState(PANEL_MODELS[0].label);
+      // const [panelWattage, setPanelWattage] = useState(PANEL_MODELS[0].wattage);
+      // const [inverter, setInverter] = useState(INVERTERS[0]);
+      // const [battery, setBattery] = useState(BATTERIES[0]);
+    // Removed duplicate projectName declaration
+  // ...all hooks and handlers above...
+  // --- Main Render ---
+  // This file is a backup and not a valid React component. Rename to .txt if you want to keep it as a reference.
+
+
+
+    // Stray code removed for build compatibility.
+
+
+
+
+
+
+
+
+  const canvasRef = useRef(null);
+
+  // Stray calculation code removed for build compatibility.
+
+  // AI Proposal Summary State and Handlers
+  const [aiSummary, setAiSummary] = useState<any>(null);
+  const [aiLoading, setAiLoading] = useState(false);

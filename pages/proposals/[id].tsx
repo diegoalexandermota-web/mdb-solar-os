@@ -1,3 +1,4 @@
+import { generateSolarProposalSummary } from '../../lib/ai/generateSolarProposalSummary';
 import RelatedSolarDesigns from '../../components/RelatedSolarDesigns';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
