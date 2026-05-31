@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from "react";
 import { useRouter } from 'next/router';
 import { supabase } from "../utils/supabaseClient";
-import { generateSolarProposalSummary } from '../lib/ai/generateSolarProposalSummary';
+import { generateSolarProposalSummary } from '../utils/generateSolarProposalSummary';
 
 const DEFAULT_PANEL = {
   width: 80,

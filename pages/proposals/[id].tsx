@@ -1,4 +1,4 @@
-import { generateSolarProposalSummary } from '../../lib/ai/generateSolarProposalSummary';
+import { generateSolarProposalSummary } from '../../utils/generateSolarProposalSummary';
 import RelatedSolarDesigns from '../../components/RelatedSolarDesigns';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
@@ -116,8 +116,36 @@ export default function ProposalBuilder() {
     setScenarios(scenarios.map((s, i) => ({ ...s, is_recommended: i === idx })));
   }
 
-  function handleAISummary() {
-    setAiSummary('MDB AI Proposal Summary: This is a professional placeholder summary. Your proposal is optimized for customer savings, clarity, and conversion. Financing options are compared for best fit.');
+
+  function handleAISummary(generateNew = false) {
+    // Use linkedDesign if available, else proposal fields
+    const src = linkedDesign || proposal || {};
+    const input = {
+      panel_count: Number(src.panel_count) || 0,
+      system_size_kw: Number(src.system_size_kw) || 0,
+      estimated_production: src.estimated_production || src.annual_production || '',
+      estimated_offset: src.estimated_offset || src.offset || '',
+      panel_model: src.panel_model || src.panelModel || '',
+      inverter_model: src.inverter_model || src.inverterModel || '',
+      battery_model: src.battery_model || src.batteryModel || '',
+    };
+    const summary = generateSolarProposalSummary(input);
+    setAiSummary(
+      summary.executive_summary + '\n' +
+      summary.homeowner_benefit + '\n' +
+      summary.financing_summary + '\n' +
+      '\nSales Talking Points:\n- ' + summary.ai_sales_talking_points.join('\n- ') +
+      '\nObjection Handling:\n- ' + summary.objection_handling.join('\n- ') +
+      '\nNext Step: ' + summary.next_step
+    );
+  }
+
+  function handleCopySummary() {
+    if (aiSummary) {
+      navigator.clipboard.writeText(aiSummary);
+      setToast('AI summary copied!');
+      setTimeout(() => setToast(null), 2000);
+    }
   }
 
   async function handleUseSolarDesignValues() {
@@ -269,14 +297,16 @@ export default function ProposalBuilder() {
         </div>
       </div>
 
+
       {/* AI Proposal Assistant Panel */}
       <div className="proposal-ai-panel card">
-
         <div className="proposal-ai-title-row">
           <span className="proposal-ai-title">MDB AI Proposal Summary</span>
-          <button className="proposal-action-btn" onClick={handleAISummary}>Generate AI Summary</button>
+          <button className="proposal-action-btn" onClick={() => handleAISummary(true)}>Generate AI Summary</button>
+          <button className="proposal-action-btn" onClick={() => handleAISummary(true)}>Regenerate</button>
+          <button className="proposal-action-btn" onClick={handleCopySummary} disabled={!aiSummary}>Copy Summary</button>
         </div>
-        <div className="proposal-ai-summary">{aiSummary}</div>
+        <div className="proposal-ai-summary" style={{whiteSpace:'pre-line'}}>{aiSummary}</div>
       </div>
 
       {/* Solar Design Actions */}
