@@ -1,317 +1,396 @@
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/router';
+import { supabase } from '../utils/supabaseClient';
+import EmptyState from '../components/EmptyState';
+import SkeletonCard from '../components/SkeletonCard';
+import AIAssistantPanel from '../components/ai/AIAssistantPanel';
+
+const STAGES = [
+  'New Lead',
+  'Contacted',
+  'Appointment Set',
+  'Proposal Sent',
+  'Credit Approved',
+  'Contract Signed',
+  'Site Survey',
+  'Permit',
+  'Install Scheduled',
+  'Installed',
+  'PTO',
+  'Commission Paid',
+];
+
+type Lead = {
+  id: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  pipeline_stage: string | null;
+  priority: string | null;
+  service_type: string | null;
+  utility_company: string | null;
+};
+
+function priorityTone(priority: string | null) {
+  if (!priority) return 'low';
+  const p = priority.toLowerCase();
+  if (p.includes('high')) return 'high';
+  if (p.includes('med')) return 'med';
+  return 'low';
+}
 
 export default function Pipeline() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string|null>(null);
-  // Example pipeline data for mobile audit
-  const [data, setData] = useState<any[]>([
-    { stage: 'New Lead', leads: [
-      { id: 1, name: 'Jane Doe', phone: '+15555550123', email: 'jane@example.com', actions: ['call','sms','whatsapp','open'], priority: 'High' },
-      { id: 2, name: 'John Smith', phone: '+15555550124', email: 'john@example.com', actions: ['call','sms','open'], priority: 'Medium' },
-    ] },
-    { stage: 'Proposal Sent', leads: [
-      { id: 3, name: 'Alice Solar', phone: '+15555550125', email: 'alice@example.com', actions: ['call','sms','whatsapp','open'], priority: 'Low' },
-    ] },
-    { stage: 'Installed', leads: [] },
-  ]);
+  const [error, setError] = useState<string | null>(null);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [search, setSearch] = useState('');
+  const [stageFilter, setStageFilter] = useState('All Stages');
 
   useEffect(() => {
-    setLoading(false);
+    fetchPipeline();
   }, []);
 
-  const STAGES = data.map(col => col.stage);
+  async function fetchPipeline() {
+    setLoading(true);
+    setError(null);
+    const { data, error } = await supabase
+      .from('leads')
+      .select('id,name,email,phone,pipeline_stage,priority,service_type,utility_company,archived')
+      .eq('archived', false)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      setError(error.message || 'Unable to load pipeline.');
+    } else {
+      setLeads((data || []) as Lead[]);
+    }
+    setLoading(false);
+  }
+
+  const grouped = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const filtered = leads.filter((lead) => {
+      const stage = lead.pipeline_stage || 'New Lead';
+      if (stageFilter !== 'All Stages' && stage !== stageFilter) return false;
+      if (!q) return true;
+      return [lead.name, lead.email, lead.phone, lead.service_type, lead.utility_company, stage]
+        .join(' ')
+        .toLowerCase()
+        .includes(q);
+    });
+
+    return STAGES.map((stage) => ({
+      stage,
+      items: filtered.filter((lead) => (lead.pipeline_stage || 'New Lead') === stage),
+    })).filter((column) => stageFilter === 'All Stages' || column.stage === stageFilter || column.items.length > 0);
+  }, [leads, search, stageFilter]);
 
   return (
-    <div className="pipeline-root">
-      <header className="pipeline-header">
-        <div className="pipeline-header-main">
-          <div className="pipeline-header-title-row">
-            <svg width="32" height="32" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="19" cy="19" r="19" fill="#2b3990"/>
-              <path d="M19 8L24.5 28H13.5L19 8Z" fill="#fbb040"/>
-            </svg>
-            <span className="pipeline-header-title">Pipeline Command Center</span>
-          </div>
-          <div className="pipeline-header-actions">
-            <input className="pipeline-search" type="text" placeholder="Search leads..." />
-            <select className="pipeline-filter">
-              <option>All Stages</option>
-              {STAGES.map(stage => <option key={stage}>{stage}</option>)}
-            </select>
-          </div>
+    <div className="pipeline-page">
+      <section className="pipeline-header">
+        <div>
+          <h2>Pipeline Command Center</h2>
+          <p>Review stage distribution, search quickly, and prioritize high-intent leads.</p>
         </div>
-        <div className="pipeline-brief">
-          <div className="pipeline-brief-icon">🤖</div>
-          <div className="pipeline-brief-content">
-            <div className="pipeline-brief-title">AI Pipeline Brief</div>
-            <div className="pipeline-brief-desc">AI-powered pipeline insights coming soon. Stay tuned for smart recommendations and lead prioritization.</div>
-          </div>
+        <div className="pipeline-actions">
+          <input
+            className="input"
+            type="text"
+            placeholder="Search leads, email, stage..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select className="select" value={stageFilter} onChange={(e) => setStageFilter(e.target.value)}>
+            <option>All Stages</option>
+            {STAGES.map((stage) => (
+              <option key={stage} value={stage}>{stage}</option>
+            ))}
+          </select>
         </div>
-      </header>
+      </section>
+
       {loading ? (
-        <div className="pipeline-loading"><SkeletonCard count={3} /></div>
+        <div className="loading-wrap"><SkeletonCard count={4} /></div>
       ) : error ? (
-        <EmptyState icon="⚠️" message="Unable to load pipeline." />
-      ) : data.length === 0 ? (
-        <EmptyState icon="📈" message="No pipeline data yet. Create your first lead to begin." />
+        <EmptyState icon="⚠️" message={error} action actionLabel="Retry" onAction={fetchPipeline} />
       ) : (
-        <div className="pipeline-board">
-          {data.map((col, idx) => (
-            <div key={col.stage} className="pipeline-column">
-              <div className="pipeline-stage-header">{col.stage}</div>
-              <div className="pipeline-card-stack">
-                {col.leads.length === 0 ? (
-                  <div className="pipeline-no-leads">No leads</div>
-                ) : col.leads.map(lead => (
-                  <div key={lead.id} className="pipeline-lead-card">
-                    <div className="lead-card-row">
-                      <span className="lead-card-name">{lead.name}</span>
-                      {lead.priority && <span className={`lead-card-priority priority-${lead.priority.toLowerCase()}`}>{lead.priority}</span>}
+        <div className="pipeline-main-grid">
+          <section className="board-wrap">
+            <div className="board-scroll">
+              {grouped.length === 0 ? (
+                <div className="column empty">
+                  <EmptyState icon="📉" message="No leads matched your filters." />
+                </div>
+              ) : (
+                grouped.map((column) => (
+                  <article key={column.stage} className="column">
+                    <header className="column-head">
+                      <div className="column-title">{column.stage}</div>
+                      <div className="column-count">{column.items.length}</div>
+                    </header>
+
+                    <div className="column-body">
+                      {column.items.length === 0 ? (
+                        <p className="muted">No leads</p>
+                      ) : (
+                        column.items.map((lead) => (
+                          <div key={lead.id} className="lead-card">
+                            <div className="lead-top">
+                              <strong>{lead.name || 'Unnamed Lead'}</strong>
+                              <span className={`badge ${priorityTone(lead.priority)}`}>{lead.priority || 'Low'}</span>
+                            </div>
+                            <div className="meta">{lead.email || '-'}</div>
+                            <div className="meta">{lead.service_type || 'Service N/A'} • {lead.utility_company || 'Utility N/A'}</div>
+
+                            <div className="lead-actions">
+                              <button
+                                type="button"
+                                className="act"
+                                onClick={() => lead.phone && window.open(`tel:${lead.phone}`)}
+                                disabled={!lead.phone}
+                              >
+                                Call
+                              </button>
+                              <button
+                                type="button"
+                                className="act"
+                                onClick={() => lead.phone && window.open(`sms:${lead.phone}`)}
+                                disabled={!lead.phone}
+                              >
+                                SMS
+                              </button>
+                              <button
+                                type="button"
+                                className="act open"
+                                onClick={() => router.push(`/leads/${lead.id}`)}
+                              >
+                                Open
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
                     </div>
-                    <div className="lead-card-email">{lead.email}</div>
-                    <div className="lead-card-actions">
-                      {lead.actions.includes('call') && <button className="lead-action-btn call" onClick={()=>window.open(`tel:${lead.phone}`)}>Call</button>}
-                      {lead.actions.includes('sms') && <button className="lead-action-btn sms" onClick={()=>window.open(`sms:${lead.phone}`)}>SMS</button>}
-                      {lead.actions.includes('whatsapp') && <button className="lead-action-btn whatsapp" onClick={()=>window.open(`https://wa.me/${lead.phone.replace(/\D/g,'')}`)}>WhatsApp</button>}
-                      {lead.actions.includes('open') && <button className="lead-action-btn open" onClick={()=>window.open(`/leads/${lead.id}`)}>Open Lead</button>}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  </article>
+                ))
+              )}
             </div>
-          ))}
+          </section>
+
+          <AIAssistantPanel
+            title="AI Pipeline Brief"
+            description="Suggested next actions based on current stage distribution and engagement patterns."
+            bullets={[
+              'Prioritize New Lead and Proposal Sent columns first',
+              'Contact high-priority leads missing a same-day follow-up',
+              'Escalate stalled Contract Signed leads to install prep tasks',
+            ]}
+            actionLabel="Generate Pipeline Brief"
+          />
         </div>
       )}
+
       <style jsx>{`
-        .pipeline-root {
-          background: #f4f6fa;
-          min-height: 100vh;
-          padding-bottom: 2.5rem;
+        .pipeline-page {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
         }
         .pipeline-header {
           background: #fff;
-          box-shadow: 0 2px 12px rgba(43,57,144,0.07);
-          border-radius: 0 0 18px 18px;
-          padding: 2.2rem 2.2rem 1.2rem 2.2rem;
-          margin-bottom: 1.5rem;
-        }
-        .pipeline-header-main {
-          display: flex;
-          flex-wrap: wrap;
-          align-items: center;
-          justify-content: space-between;
-          gap: 1.5rem;
-        }
-        .pipeline-header-title-row {
-          display: flex;
-          align-items: center;
-          gap: 0.7rem;
-        }
-        .pipeline-header-title {
-          font-size: 1.45rem;
-          font-weight: 700;
-          color: #2b3990;
-          letter-spacing: -0.5px;
-        }
-        .pipeline-header-actions {
-          display: flex;
-          gap: 0.7rem;
-        }
-        .pipeline-search {
-          border: 1.5px solid #dbe2f3;
-          border-radius: 7px;
-          padding: 0.6em 1em;
-          font-size: 1rem;
-          outline: none;
-          min-width: 180px;
-        }
-        .pipeline-search:focus {
-          border-color: #2b3990;
-        }
-        .pipeline-filter {
-          border: 1.5px solid #dbe2f3;
-          border-radius: 7px;
-          padding: 0.6em 1em;
-          font-size: 1rem;
-          outline: none;
-        }
-        .pipeline-brief {
-          display: flex;
-          align-items: center;
-          gap: 1.1rem;
-          margin-top: 1.7rem;
-          background: #e9edf7;
-          border-radius: 10px;
-          padding: 1.2rem 1.2rem;
-        }
-        .pipeline-brief-icon {
-          font-size: 2.1rem;
-        }
-        .pipeline-brief-title {
-          color: #2b3990;
-          font-size: 1.13rem;
-          font-weight: 700;
-        }
-        .pipeline-brief-desc {
-          color: #1a1d2e;
-          font-size: 1.01rem;
-          font-weight: 500;
-        }
-        .pipeline-board {
-          display: flex;
-          gap: 1.3rem;
-          min-width: 600px;
-          max-width: 100vw;
-          overflow-x: auto;
-          padding: 0 2.2rem;
-          scrollbar-width: thin;
-        }
-        .pipeline-column {
-          flex: 0 0 270px;
-          background: #fff;
+          border: 1px solid #e2e8f0;
           border-radius: 14px;
-          box-shadow: 0 2px 8px rgba(43,57,144,0.06);
-          min-height: 340px;
+          box-shadow: 0 8px 24px -20px rgba(15, 23, 42, 0.45);
+          padding: 14px;
+          display: flex;
+          justify-content: space-between;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+        .pipeline-header h2 {
+          margin: 0;
+          font-size: 1.2rem;
+          color: #0f172a;
+        }
+        .pipeline-header p {
+          margin: 6px 0 0;
+          color: #475569;
+          font-size: 0.9rem;
+        }
+        .pipeline-actions {
+          display: flex;
+          gap: 8px;
+          align-items: center;
+          flex-wrap: wrap;
+        }
+        .input,
+        .select {
+          border: 1px solid #cbd5e1;
+          border-radius: 10px;
+          padding: 9px 10px;
+          font-size: 0.9rem;
+          background: #fff;
+          min-width: 190px;
+        }
+        .input:focus,
+        .select:focus {
+          outline: none;
+          border-color: #2563eb;
+        }
+        .loading-wrap {
+          background: #fff;
+          border: 1px solid #e2e8f0;
+          border-radius: 14px;
+          padding: 16px;
+        }
+        .pipeline-main-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 320px;
+          gap: 12px;
+          align-items: start;
+        }
+        .board-wrap {
+          background: #fff;
+          border: 1px solid #e2e8f0;
+          border-radius: 14px;
+          box-shadow: 0 8px 24px -20px rgba(15, 23, 42, 0.45);
+          padding: 12px;
+        }
+        .board-scroll {
+          display: grid;
+          grid-auto-flow: column;
+          grid-auto-columns: minmax(250px, 250px);
+          gap: 10px;
+          overflow-x: auto;
+          padding-bottom: 4px;
+        }
+        .column {
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 12px;
           display: flex;
           flex-direction: column;
-          padding: 1.1rem 0.7rem 1.1rem 0.7rem;
+          max-height: 72vh;
         }
-        .pipeline-stage-header {
+        .column.empty {
+          grid-column: span 2;
+          min-height: 220px;
+          justify-content: center;
+        }
+        .column-head {
           position: sticky;
           top: 0;
-          z-index: 2;
-          background: #fff;
-          padding: 0.5rem 0;
-          font-weight: 700;
-          color: #2b3990;
-          font-size: 1.13rem;
-          border-bottom: 1px solid #eee;
-        }
-        .pipeline-card-stack {
-          margin-top: 8px;
-          display: flex;
-          flex-direction: column;
-          gap: 13px;
-        }
-        .pipeline-no-leads {
-          color: #aaa;
-          font-size: 0.98rem;
-          padding: 1.5rem 0;
-          text-align: center;
-        }
-        .pipeline-lead-card {
-          background: #f4f6fa;
-          border-radius: 10px;
-          padding: 1.1rem 1rem;
-          box-shadow: 0 1px 4px rgba(43,57,144,0.04);
-          display: flex;
-          flex-direction: column;
-          gap: 7px;
-          border-left: 6px solid #2b3990;
-          position: relative;
-        }
-        .lead-card-row {
+          background: #f8fafc;
+          border-bottom: 1px solid #e2e8f0;
+          padding: 10px;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 0.7rem;
+          border-radius: 12px 12px 0 0;
         }
-        .lead-card-name {
+        .column-title {
+          font-size: 0.88rem;
           font-weight: 700;
-          font-size: 1.08rem;
-          color: #2b3990;
+          color: #0f172a;
         }
-        .lead-card-priority {
-          font-size: 0.93rem;
+        .column-count {
+          font-size: 0.76rem;
+          padding: 3px 8px;
+          border-radius: 999px;
+          background: #e2e8f0;
+          color: #334155;
           font-weight: 700;
-          padding: 0.18em 0.7em;
-          border-radius: 7px;
-          margin-left: 0.2em;
         }
-        .priority-high {
-          background: #b00020;
-          color: #fff;
-        }
-        .priority-medium {
-          background: #fbb040;
-          color: #2b3990;
-        }
-        .priority-low {
-          background: #b0b6d1;
-          color: #fff;
-        }
-        .lead-card-email {
-          font-size: 0.97rem;
-          color: #444;
-        }
-        .lead-card-actions {
+        .column-body {
           display: flex;
-          gap: 0.5rem;
-          flex-wrap: wrap;
-          margin-top: 4px;
+          flex-direction: column;
+          gap: 8px;
+          padding: 10px;
+          overflow-y: auto;
         }
-        .lead-action-btn {
-          border-radius: 7px;
-          font-weight: 600;
-          font-size: 0.97rem;
-          padding: 0.5em 1em;
+        .lead-card {
+          background: #fff;
+          border: 1px solid #e2e8f0;
+          border-radius: 10px;
+          padding: 10px;
+          box-shadow: 0 6px 16px -18px rgba(15, 23, 42, 0.5);
+        }
+        .lead-top {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 6px;
+          margin-bottom: 6px;
+        }
+        .lead-top strong {
+          color: #0f172a;
+          font-size: 0.9rem;
+        }
+        .meta {
+          color: #475569;
+          font-size: 0.8rem;
+          margin-bottom: 4px;
+        }
+        .badge {
+          font-size: 0.67rem;
+          border-radius: 999px;
+          padding: 2px 8px;
+          font-weight: 700;
+          color: #fff;
+        }
+        .badge.high {
+          background: #dc2626;
+        }
+        .badge.med {
+          background: #d97706;
+        }
+        .badge.low {
+          background: #475569;
+        }
+        .lead-actions {
+          display: flex;
+          gap: 6px;
+          margin-top: 8px;
+        }
+        .act {
           border: none;
-          box-shadow: 0 1px 4px rgba(43,57,144,0.04);
-          transition: background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s;
+          border-radius: 8px;
+          padding: 6px 8px;
+          font-size: 0.76rem;
+          font-weight: 700;
+          cursor: pointer;
+          color: #0f172a;
+          background: #e2e8f0;
         }
-        .lead-action-btn.call, .lead-action-btn.sms {
-          background: #2b3990;
+        .act.open {
+          background: linear-gradient(135deg, #1d4ed8, #2563eb);
           color: #fff;
         }
-        .lead-action-btn.whatsapp {
-          background: #25d366;
-          color: #fff;
+        .act:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
         }
-        .lead-action-btn.open {
-          background: #fbb040;
-          color: #2b3990;
+        .muted {
+          margin: 0;
+          color: #64748b;
+          font-size: 0.82rem;
         }
-        .lead-action-btn:active {
-          background: #1a1d2e;
-          color: #fff;
-          transform: scale(0.97);
-        }
-        @media (max-width: 900px) {
-          .pipeline-header {
-            padding: 1.2rem 0.7rem 1rem 0.7rem;
-            border-radius: 0 0 13px 13px;
-          }
-          .pipeline-board {
-            min-width: 600px;
-            padding: 0 0.7rem;
-          }
-          .pipeline-column {
-            min-width: 90vw;
-            max-width: 98vw;
-            padding: 0.7rem 0.3rem 0.7rem 0.3rem;
+        @media (max-width: 1280px) {
+          .pipeline-main-grid {
+            grid-template-columns: 1fr;
           }
         }
-        @media (max-width: 600px) {
-          .pipeline-header {
-            padding: 0.7rem 0.2rem 0.7rem 0.2rem;
-            border-radius: 0 0 10px 10px;
+        @media (max-width: 640px) {
+          .input,
+          .select {
+            min-width: 100%;
           }
-          .pipeline-board {
-            min-width: 400px;
-            padding: 0 0.2rem;
-          }
-          .pipeline-column {
-            min-width: 96vw;
-            max-width: 99vw;
-            padding: 0.3rem 0.1rem 0.3rem 0.1rem;
-          }
-          .pipeline-lead-card {
-            padding: 0.75rem 0.5rem;
+          .board-scroll {
+            grid-auto-columns: minmax(88vw, 88vw);
           }
         }
       `}</style>
     </div>
   );
 }
-import React, { useState, useEffect } from 'react';
-import SkeletonCard from '../components/SkeletonCard';
-import EmptyState from '../components/EmptyState';

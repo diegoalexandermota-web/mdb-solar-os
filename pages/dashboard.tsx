@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../utils/supabaseClient';
 import SkeletonMetric from '../components/SkeletonMetric';
 import SkeletonTable from '../components/SkeletonTable';
+import AIAssistantPanel from '../components/ai/AIAssistantPanel';
 
 type MetricState = {
   today: number;
@@ -23,11 +24,11 @@ type LeadRow = {
   created_at: string | null;
 };
 
-function KpiCard({ label, value, tone }: { label: string; value: string | number; tone?: 'accent' | 'warning' | 'neutral' }) {
+function KpiCard({ label, value, tone }: { label: string; value: string | number; tone?: 'blue' | 'amber' | 'slate' }) {
   return (
     <article className={`kpi-card${tone ? ` ${tone}` : ''}`}>
-      <div className="kpi-label">{label}</div>
-      <div className="kpi-value">{value}</div>
+      <span>{label}</span>
+      <strong>{value}</strong>
     </article>
   );
 }
@@ -55,14 +56,14 @@ export default function Dashboard() {
   });
   const [recentLeads, setRecentLeads] = useState<LeadRow[]>([]);
 
-  const funnelData = useMemo(
-    () => [
-      { label: 'Created', value: metrics.proposalsCreated },
-      { label: 'Sent', value: metrics.proposalsSent },
-      { label: 'Signed', value: metrics.proposalsSigned },
-    ],
-    [metrics.proposalsCreated, metrics.proposalsSent, metrics.proposalsSigned]
-  );
+  const funnelBars = useMemo(() => {
+    const max = Math.max(metrics.proposalsCreated, metrics.proposalsSent, metrics.proposalsSigned, 1);
+    return [
+      { label: 'Created', value: metrics.proposalsCreated, width: (metrics.proposalsCreated / max) * 100 },
+      { label: 'Sent', value: metrics.proposalsSent, width: (metrics.proposalsSent / max) * 100 },
+      { label: 'Signed', value: metrics.proposalsSigned, width: (metrics.proposalsSigned / max) * 100 },
+    ];
+  }, [metrics.proposalsCreated, metrics.proposalsSent, metrics.proposalsSigned]);
 
   useEffect(() => {
     fetchMetrics();
@@ -81,11 +82,9 @@ export default function Dashboard() {
         .from('leads')
         .select('id,name,service_type,pipeline_stage,created_at')
         .order('created_at', { ascending: false })
-        .limit(6);
+        .limit(8);
 
-      if (tasksErr || propErr || leadsErr) {
-        throw new Error(tasksErr?.message || propErr?.message || leadsErr?.message);
-      }
+      if (tasksErr || propErr || leadsErr) throw new Error(tasksErr?.message || propErr?.message || leadsErr?.message);
 
       let todayCount = 0;
       let overdueCount = 0;
@@ -96,23 +95,21 @@ export default function Dashboard() {
       let avgValue = 0;
       const financingMix: Record<string, number> = {};
 
-      // Existing dashboard logic preserved.
+      // Existing dashboard task metrics logic preserved.
       if (tasks) {
         todayCount = tasks.filter((t: any) => !t.completed && t.due_date === todayStr).length;
         overdueCount = tasks.filter((t: any) => !t.completed && t.due_date < todayStr).length;
         followups = tasks.filter((t: any) => !t.completed && t.type === 'Call').length;
       }
 
-      // Existing dashboard logic preserved.
+      // Existing dashboard proposal metrics logic preserved.
       if (proposals) {
         const active = proposals.filter((p: any) => !p.archived);
         proposalsCreated = active.length;
         proposalsSent = active.filter((p: any) => p.status === 'Sent').length;
         proposalsSigned = active.filter((p: any) => p.status === 'Signed').length;
         avgValue = active.length
-          ? Math.round(
-              active.reduce((sum: number, p: any) => sum + (Number(p.monthly_bill) || 0), 0) / active.length
-            )
+          ? Math.round(active.reduce((sum: number, p: any) => sum + (Number(p.monthly_bill) || 0), 0) / active.length)
           : 0;
 
         for (const p of active) {
@@ -121,9 +118,7 @@ export default function Dashboard() {
         }
       }
 
-      const proposalConversion = proposalsCreated
-        ? Math.round((proposalsSigned / proposalsCreated) * 100)
-        : 0;
+      const proposalConversion = proposalsCreated ? Math.round((proposalsSigned / proposalsCreated) * 100) : 0;
 
       setMetrics({
         today: todayCount,
@@ -145,364 +140,284 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="hub-shell">
-      <aside className="hub-sidebar">
-        <div className="hub-brand">
-          <div className="hub-logo">
-            <svg width="34" height="34" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="19" cy="19" r="19" fill="#111827" />
-              <path d="M19 8L24.5 28H13.5L19 8Z" fill="#f59e0b" />
-            </svg>
-          </div>
-          <div>
-            <div className="brand-title">MDB Solar Hub</div>
-            <div className="brand-subtitle">Enterprise CRM</div>
-          </div>
+    <div className="dashboard-page">
+      <section className="welcome-strip">
+        <div>
+          <h2>Good afternoon, MDB Team</h2>
+          <p>Monitor pipeline health, proposal momentum, and top-priority follow-ups.</p>
         </div>
+        <div className="welcome-actions">
+          <button className="ghost-btn" type="button">Light/Dark (Soon)</button>
+          <button className="primary-btn" type="button">+ New Lead</button>
+        </div>
+      </section>
 
-        <nav className="hub-nav">
-          <a className="hub-nav-link active" href="/dashboard">Dashboard</a>
-          <a className="hub-nav-link" href="/pipeline">Pipeline</a>
-          <a className="hub-nav-link" href="/projects">Projects</a>
-          <a className="hub-nav-link" href="/proposals">Proposals</a>
-          <a className="hub-nav-link" href="/tasks">Tasks</a>
-          <a className="hub-nav-link" href="/customer-portal">Customer Portal</a>
-        </nav>
-      </aside>
-
-      <main className="hub-main">
-        <header className="hub-topbar">
-          <div>
-            <h1>Command Dashboard</h1>
-            <p>Track operations, proposals, and follow-ups in one view.</p>
+      {loading ? (
+        <>
+          <div className="kpi-grid">
+            <SkeletonMetric width={140} height={72} count={4} />
+            <SkeletonMetric width={140} height={72} count={4} />
           </div>
-          <div className="hub-topbar-actions">
-            <button className="ghost-btn" type="button">Light/Dark (Soon)</button>
-            <button className="primary-btn" type="button">+ New Lead</button>
+          <div className="main-grid">
+            <section className="panel span-2"><SkeletonTable rows={5} cols={3} /></section>
+            <section className="panel"><SkeletonTable rows={4} cols={2} /></section>
           </div>
-        </header>
+        </>
+      ) : error ? (
+        <div className="error-panel">
+          <h3>Unable to load dashboard metrics.</h3>
+          <p>{error}</p>
+          <button className="primary-btn" type="button" onClick={fetchMetrics}>Try Again</button>
+        </div>
+      ) : (
+        <>
+          <section className="kpi-grid">
+            <KpiCard label="Tasks Due Today" value={metrics.today} tone="blue" />
+            <KpiCard label="Overdue Tasks" value={metrics.overdue} tone="amber" />
+            <KpiCard label="Follow-ups Pending" value={metrics.followups} tone="slate" />
+            <KpiCard label="Proposals Created" value={metrics.proposalsCreated} />
+            <KpiCard label="Proposals Sent" value={metrics.proposalsSent} />
+            <KpiCard label="Signed Proposals" value={metrics.proposalsSigned} />
+            <KpiCard label="Proposal Conversion" value={`${metrics.proposalConversion}%`} />
+            <KpiCard label="Avg. Proposal Value" value={`$${metrics.avgValue}`} />
+          </section>
 
-        {loading ? (
-          <>
-            <div className="kpi-grid">
-              <SkeletonMetric width={130} height={66} count={4} />
-              <SkeletonMetric width={130} height={66} count={4} />
-            </div>
-            <div className="section-grid">
-              <section className="panel wide"><SkeletonTable rows={4} cols={3} /></section>
-              <section className="panel"><SkeletonTable rows={3} cols={2} /></section>
-            </div>
-          </>
-        ) : error ? (
-          <div className="error-panel">
-            <h3>Unable to load dashboard data.</h3>
-            <p>{error}</p>
-            <button className="primary-btn" onClick={fetchMetrics}>Try Again</button>
-          </div>
-        ) : (
-          <>
-            <section className="kpi-grid">
-              <KpiCard label="Tasks Due Today" value={metrics.today} tone="accent" />
-              <KpiCard label="Overdue Tasks" value={metrics.overdue} tone="warning" />
-              <KpiCard label="Follow-ups Pending" value={metrics.followups} tone="neutral" />
-              <KpiCard label="Proposals Created" value={metrics.proposalsCreated} />
-              <KpiCard label="Proposals Sent" value={metrics.proposalsSent} />
-              <KpiCard label="Signed Proposals" value={metrics.proposalsSigned} />
-              <KpiCard label="Proposal Conversion" value={`${metrics.proposalConversion}%`} />
-              <KpiCard label="Avg. Proposal Value" value={`$${metrics.avgValue}`} />
-            </section>
-
-            <section className="section-grid">
-              <article className="panel wide">
-                <h2>Pipeline Funnel</h2>
-                <div className="funnel-track">
-                  {funnelData.map((step, idx) => (
-                    <div key={step.label} className="funnel-step">
-                      <span>{step.label}</span>
-                      <strong>{step.value}</strong>
-                      {idx < funnelData.length - 1 && <i>→</i>}
+          <section className="main-grid">
+            <article className="panel span-2">
+              <h3>Pipeline Funnel</h3>
+              <div className="funnel-bars">
+                {funnelBars.map((bar) => (
+                  <div key={bar.label} className="funnel-row">
+                    <div className="funnel-row-head">
+                      <span>{bar.label}</span>
+                      <strong>{bar.value}</strong>
                     </div>
-                  ))}
-                </div>
-              </article>
+                    <div className="funnel-track">
+                      <div className="funnel-fill" style={{ width: `${Math.max(bar.width, 10)}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </article>
 
-              <article className="panel">
-                <h2>Service Mix</h2>
-                <div className="mix-grid">
-                  {Object.keys(metrics.financingMix).length === 0 ? (
-                    <p className="muted">No financing data yet.</p>
-                  ) : (
-                    Object.entries(metrics.financingMix as Record<string, number | string>).map(([k, v]) => (
-                      <div className="mix-tile" key={k}>
-                        <span>{k}</span>
-                        <strong>{String(v)}</strong>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </article>
-            </section>
+            <article className="panel">
+              <h3>Service Mix</h3>
+              <div className="mix-grid">
+                {Object.keys(metrics.financingMix).length === 0 ? (
+                  <p className="muted">No financing data yet.</p>
+                ) : (
+                  Object.entries(metrics.financingMix as Record<string, number | string>).map(([k, v]) => (
+                    <div className="mix-item" key={k}>
+                      <span>{k}</span>
+                      <strong>{String(v)}</strong>
+                    </div>
+                  ))
+                )}
+              </div>
+            </article>
 
-            <section className="section-grid two-columns">
-              <article className="panel wide">
-                <h2>Recent Leads</h2>
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Name</th>
-                        <th>Service</th>
-                        <th>Stage</th>
-                        <th>Created</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {recentLeads.length === 0 ? (
-                        <tr>
-                          <td colSpan={4} className="muted">No leads found.</td>
+            <article className="panel span-2">
+              <h3>Recent Leads</h3>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Service</th>
+                      <th>Stage</th>
+                      <th>Created</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentLeads.length === 0 ? (
+                      <tr><td colSpan={4} className="muted">No leads found.</td></tr>
+                    ) : (
+                      recentLeads.map((lead) => (
+                        <tr key={lead.id}>
+                          <td>{lead.name || '-'}</td>
+                          <td>{lead.service_type || '-'}</td>
+                          <td>{lead.pipeline_stage || '-'}</td>
+                          <td>{formatDate(lead.created_at)}</td>
                         </tr>
-                      ) : (
-                        recentLeads.map((lead) => (
-                          <tr key={lead.id}>
-                            <td>{lead.name || '-'}</td>
-                            <td>{lead.service_type || '-'}</td>
-                            <td>{lead.pipeline_stage || '-'}</td>
-                            <td>{formatDate(lead.created_at)}</td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </article>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </article>
 
-              <aside className="panel ai-panel">
-                <h2>MDB AI Assistant</h2>
-                <p>
-                  AI insights are enabled for follow-ups, proposal summaries, and next-best actions.
-                  Suggested focus: prioritize overdue follow-ups tied to high-bill leads.
-                </p>
-                <ul>
-                  <li>Generate follow-up for stalled leads</li>
-                  <li>Review proposal conversion by financing type</li>
-                  <li>Draft WhatsApp outreach from AI summary</li>
-                </ul>
-                <button className="ghost-btn" type="button">Open AI Assistant</button>
-              </aside>
-            </section>
-          </>
-        )}
-      </main>
+            <AIAssistantPanel
+              title="MDB AI Assistant"
+              description="Operational summary powered by your current CRM data and proposal progress."
+              bullets={[
+                'Prioritize overdue follow-ups tied to high monthly bill leads',
+                'Review signed-to-sent conversion trend by financing mix',
+                'Trigger AI follow-up generation for stalled prospects',
+              ]}
+            />
+          </section>
+        </>
+      )}
 
       <style jsx>{`
-        .hub-shell {
-          min-height: 100vh;
-          background: radial-gradient(circle at 5% 0%, #1f2937 0%, #111827 28%, #0b1120 100%);
-          display: grid;
-          grid-template-columns: 260px minmax(0, 1fr);
-        }
-        .hub-sidebar {
-          background: rgba(3, 7, 18, 0.9);
-          border-right: 1px solid rgba(148, 163, 184, 0.18);
-          padding: 24px 16px;
-          position: sticky;
-          top: 0;
-          height: 100vh;
-        }
-        .hub-brand {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          margin-bottom: 24px;
-        }
-        .hub-logo {
-          width: 38px;
-          height: 38px;
-          border-radius: 11px;
-          background: linear-gradient(135deg, #f59e0b, #f97316);
-          display: grid;
-          place-items: center;
-        }
-        .brand-title {
-          color: #f8fafc;
-          font-size: 1rem;
-          font-weight: 700;
-        }
-        .brand-subtitle {
-          color: #94a3b8;
-          font-size: 0.78rem;
-        }
-        .hub-nav {
+        .dashboard-page {
           display: flex;
           flex-direction: column;
-          gap: 6px;
+          gap: 14px;
         }
-        .hub-nav-link {
-          color: #cbd5e1;
-          text-decoration: none;
-          padding: 10px 12px;
-          border-radius: 10px;
-          font-size: 0.95rem;
-          transition: 0.2s ease;
-        }
-        .hub-nav-link:hover,
-        .hub-nav-link.active {
-          background: rgba(30, 41, 59, 0.92);
+        .welcome-strip {
+          background: linear-gradient(135deg, #0f172a, #1d4ed8);
+          border-radius: 16px;
           color: #fff;
-        }
-        .hub-main {
-          padding: 28px;
-          background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
-        }
-        .hub-topbar {
+          padding: 18px;
           display: flex;
-          justify-content: space-between;
           align-items: flex-start;
+          justify-content: space-between;
           gap: 16px;
-          margin-bottom: 20px;
         }
-        .hub-topbar h1 {
+        .welcome-strip h2 {
           margin: 0;
-          color: #0f172a;
-          font-size: 1.85rem;
-          letter-spacing: -0.03em;
+          font-size: 1.35rem;
         }
-        .hub-topbar p {
+        .welcome-strip p {
           margin: 8px 0 0;
-          color: #475569;
+          color: #cbd5e1;
+          max-width: 650px;
         }
-        .hub-topbar-actions {
+        .welcome-actions {
           display: flex;
-          gap: 10px;
+          gap: 8px;
           flex-wrap: wrap;
         }
         .primary-btn,
         .ghost-btn {
           border: none;
           border-radius: 10px;
-          padding: 10px 14px;
+          padding: 9px 12px;
           font-weight: 600;
           cursor: pointer;
         }
         .primary-btn {
-          background: linear-gradient(130deg, #0f172a, #1d4ed8);
-          color: #fff;
+          background: linear-gradient(135deg, #f59e0b, #f97316);
+          color: #111827;
         }
         .ghost-btn {
-          background: #e2e8f0;
-          color: #0f172a;
+          background: rgba(148, 163, 184, 0.2);
+          color: #fff;
         }
         .kpi-grid {
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 12px;
-          margin-bottom: 16px;
+          gap: 10px;
         }
         .kpi-card {
           background: #fff;
           border: 1px solid #e2e8f0;
           border-radius: 14px;
           padding: 14px;
-          box-shadow: 0 10px 30px -20px rgba(15, 23, 42, 0.35);
+          box-shadow: 0 8px 24px -20px rgba(15, 23, 42, 0.45);
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
         }
-        .kpi-card.accent {
-          background: linear-gradient(140deg, #172554, #1e3a8a);
-          color: #fff;
+        .kpi-card span {
+          color: #64748b;
+          font-size: 0.79rem;
+          font-weight: 600;
+        }
+        .kpi-card strong {
+          color: #0f172a;
+          font-size: 1.6rem;
+          letter-spacing: -0.02em;
+        }
+        .kpi-card.blue,
+        .kpi-card.amber,
+        .kpi-card.slate {
           border: none;
         }
-        .kpi-card.warning {
-          background: linear-gradient(140deg, #78350f, #b45309);
+        .kpi-card.blue {
+          background: linear-gradient(135deg, #1e3a8a, #1d4ed8);
+        }
+        .kpi-card.amber {
+          background: linear-gradient(135deg, #92400e, #f59e0b);
+        }
+        .kpi-card.slate {
+          background: linear-gradient(135deg, #0f172a, #334155);
+        }
+        .kpi-card.blue span,
+        .kpi-card.amber span,
+        .kpi-card.slate span,
+        .kpi-card.blue strong,
+        .kpi-card.amber strong,
+        .kpi-card.slate strong {
           color: #fff;
-          border: none;
         }
-        .kpi-card.neutral {
-          background: linear-gradient(140deg, #0f172a, #334155);
-          color: #fff;
-          border: none;
-        }
-        .kpi-label {
-          font-size: 0.83rem;
-          opacity: 0.85;
-          margin-bottom: 8px;
-        }
-        .kpi-value {
-          font-size: 1.7rem;
-          font-weight: 700;
-        }
-        .section-grid {
+        .main-grid {
           display: grid;
           grid-template-columns: 2fr 1fr;
-          gap: 14px;
-          margin-bottom: 14px;
-        }
-        .section-grid.two-columns {
-          align-items: start;
+          gap: 12px;
         }
         .panel {
           background: #fff;
           border: 1px solid #e2e8f0;
           border-radius: 14px;
-          padding: 16px;
-          box-shadow: 0 10px 30px -22px rgba(15, 23, 42, 0.35);
+          padding: 14px;
+          box-shadow: 0 8px 24px -20px rgba(15, 23, 42, 0.42);
         }
-        .panel.wide {
+        .panel.span-2 {
           min-width: 0;
         }
-        .panel h2 {
-          margin: 0 0 12px;
-          font-size: 1.05rem;
+        .panel h3 {
+          margin: 0 0 10px;
           color: #0f172a;
+          font-size: 1rem;
+        }
+        .funnel-bars {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .funnel-row-head {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          font-size: 0.9rem;
+          margin-bottom: 5px;
+          color: #334155;
         }
         .funnel-track {
-          display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 8px;
+          width: 100%;
+          height: 11px;
+          border-radius: 999px;
+          background: #e2e8f0;
+          overflow: hidden;
         }
-        .funnel-step {
-          border: 1px solid #cbd5e1;
-          border-radius: 12px;
-          padding: 12px;
-          background: #f8fafc;
-          position: relative;
-        }
-        .funnel-step span {
-          display: block;
-          font-size: 0.84rem;
-          color: #475569;
-        }
-        .funnel-step strong {
-          font-size: 1.3rem;
-          color: #0f172a;
-        }
-        .funnel-step i {
-          position: absolute;
-          right: -12px;
-          top: 50%;
-          transform: translateY(-50%);
-          color: #94a3b8;
-          font-style: normal;
-          font-size: 1rem;
+        .funnel-fill {
+          height: 100%;
+          border-radius: 999px;
+          background: linear-gradient(90deg, #1d4ed8, #38bdf8);
         }
         .mix-grid {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 8px;
         }
-        .mix-tile {
+        .mix-item {
           border: 1px solid #e2e8f0;
           border-radius: 10px;
           padding: 10px;
           background: #f8fafc;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
         }
-        .mix-tile span {
+        .mix-item span {
           color: #64748b;
-          font-size: 0.82rem;
+          font-size: 0.8rem;
         }
-        .mix-tile strong {
-          display: block;
-          margin-top: 6px;
+        .mix-item strong {
           color: #0f172a;
-          font-size: 1.1rem;
+          font-size: 1.05rem;
         }
         .table-wrap {
           overflow-x: auto;
@@ -514,26 +429,16 @@ export default function Dashboard() {
         th,
         td {
           text-align: left;
-          padding: 10px 8px;
+          padding: 9px 8px;
           border-bottom: 1px solid #e2e8f0;
-          font-size: 0.9rem;
+          font-size: 0.88rem;
         }
         th {
-          color: #475569;
-          font-weight: 600;
+          color: #64748b;
+          font-weight: 700;
         }
         td {
           color: #0f172a;
-        }
-        .ai-panel p {
-          margin: 0 0 10px;
-          color: #334155;
-          line-height: 1.45;
-        }
-        .ai-panel ul {
-          margin: 0 0 14px;
-          padding-left: 18px;
-          color: #334155;
         }
         .muted {
           color: #64748b;
@@ -542,7 +447,7 @@ export default function Dashboard() {
           background: #fff;
           border: 1px solid #fecaca;
           border-radius: 14px;
-          padding: 18px;
+          padding: 14px;
         }
         .error-panel h3 {
           margin: 0;
@@ -555,27 +460,12 @@ export default function Dashboard() {
           .kpi-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
           }
-          .section-grid {
+          .main-grid {
             grid-template-columns: 1fr;
           }
         }
-        @media (max-width: 900px) {
-          .hub-shell {
-            grid-template-columns: 1fr;
-          }
-          .hub-sidebar {
-            position: static;
-            height: auto;
-            padding: 12px;
-          }
-          .hub-nav {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-          .hub-main {
-            padding: 14px;
-          }
-          .hub-topbar {
+        @media (max-width: 720px) {
+          .welcome-strip {
             flex-direction: column;
           }
           .kpi-grid {
