@@ -1,24 +1,27 @@
-import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/router';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Search,
   Filter,
-  X,
   Phone,
   Mail,
+  MessageCircle,
   MessageSquare,
   ExternalLink,
+  FileText,
   Flame,
   Clock,
   ShieldCheck,
-  FileText,
   AlertTriangle,
   DollarSign,
+  Users,
+  User,
+  X,
   Sun,
 } from 'lucide-react';
 import { supabase } from '../utils/supabaseClient';
-import { ServicePill, Topbar } from '../components/layout/Topbar';
+import { PageHeader, ServicePill } from '../components/layout/Topbar';
+import { BadgeChip, type LeadBadge } from '../components/layout/BadgeChip';
 
 const STAGES = [
   'New Lead',
@@ -33,598 +36,414 @@ const STAGES = [
   'Installed',
   'PTO',
   'Commission Paid',
-];
+] as const;
+
+type PipelineStage = (typeof STAGES)[number];
+type View = 'rep' | 'admin';
 
 type Lead = {
   id: string;
   name: string | null;
-  email: string | null;
   phone: string | null;
-  city?: string | null;
+  email: string | null;
+  utility_company: string | null;
+  service_type: string | null;
   pipeline_stage: string | null;
   priority: string | null;
-  service_type: string | null;
-  utility_company: string | null;
-  created_at?: string | null;
+  city: string | null;
+  created_at: string | null;
+};
+
+const STAGE_VALUE: Record<PipelineStage, number> = {
+  'New Lead': 18000,
+  Contacted: 19500,
+  'Appointment Set': 21000,
+  'Proposal Sent': 24500,
+  'Credit Approved': 26000,
+  'Contract Signed': 28500,
+  'Site Survey': 28500,
+  Permit: 29000,
+  'Install Scheduled': 30000,
+  Installed: 31500,
+  PTO: 32000,
+  'Commission Paid': 32500,
 };
 
 function fmtCurrency(v: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
 }
 
-function stageValue(stage: string) {
-  const map: Record<string, number> = {
-    'New Lead': 18000,
-    Contacted: 19500,
-    'Appointment Set': 21000,
-    'Proposal Sent': 24500,
-    'Credit Approved': 26000,
-    'Contract Signed': 28500,
-    'Site Survey': 28500,
-    Permit: 29000,
-    'Install Scheduled': 30000,
-    Installed: 31500,
-    PTO: 32000,
-    'Commission Paid': 32500,
-  };
-  return map[stage] || 18000;
+function inferBadges(lead: Lead): LeadBadge[] {
+  const badges: LeadBadge[] = [];
+  const stage = lead.pipeline_stage || 'New Lead';
+  if ((lead.priority || '').toLowerCase().includes('high')) badges.push('Hot Lead');
+  if (stage === 'Proposal Sent' || stage === 'Credit Approved') badges.push('Credit Ready');
+  if (stage === 'Permit') badges.push('Install Risk');
+  if (stage === 'PTO') badges.push('Commission Pending');
+  if (stage === 'Contacted' || stage === 'Appointment Set') badges.push('Needs Follow-Up');
+  return badges.slice(0, 3);
 }
 
-function priorityClass(p: string | null) {
-  const s = (p || '').toLowerCase();
-  if (s.includes('high')) return 'high';
-  if (s.includes('med')) return 'medium';
-  return 'low';
+function stageFromLead(lead: Lead): PipelineStage {
+  const s = lead.pipeline_stage || 'New Lead';
+  return (STAGES.includes(s as PipelineStage) ? s : 'New Lead') as PipelineStage;
+}
+
+function PriorityChip({ priority }: { priority: string | null }) {
+  const p = (priority || 'Low').toLowerCase();
+  const cls = p.includes('high')
+    ? 'bg-destructive/15 text-destructive border-destructive/30'
+    : p.includes('med')
+    ? 'bg-gold/20 text-navy border-gold/40'
+    : 'bg-secondary text-muted-foreground border-border';
+
+  return <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border ${cls}`}>{priority || 'Low'}</span>;
+}
+
+function ViewBtn({ active, onClick, icon: Icon, label }: { active: boolean; onClick: () => void; icon: any; label: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold transition-colors ${
+        active ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+      }`}
+      type="button"
+    >
+      <Icon className="size-3.5" /> {label}
+    </button>
+  );
+}
+
+function Insight({ icon: Icon, n, label, tone }: { icon: any; n: number; label: string; tone: 'warning' | 'danger' | 'success' | 'gold' }) {
+  const toneMap = {
+    warning: 'bg-warning/20 text-warning border-warning/30',
+    danger: 'bg-destructive/20 text-destructive-foreground border-destructive/30',
+    success: 'bg-success/20 text-success border-success/30',
+    gold: 'bg-gold/20 text-gold border-gold/40',
+  } as const;
+
+  return (
+    <div className="bg-card/10 backdrop-blur rounded-lg border border-white/10 px-2.5 py-2 flex items-center gap-2">
+      <div className={`size-7 rounded grid place-items-center border ${toneMap[tone]}`}>
+        <Icon className="size-3.5" />
+      </div>
+      <div className="leading-tight min-w-0">
+        <div className="text-base font-bold">{n}</div>
+        <div className="text-[9px] uppercase tracking-wide opacity-80 truncate">{label}</div>
+      </div>
+    </div>
+  );
+}
+
+function Suggestion({ icon: Icon, title, body }: { icon: any; title: string; body: string }) {
+  return (
+    <div className="bg-card/10 backdrop-blur rounded-lg border border-white/10 p-2.5">
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-bold opacity-80">
+        <Icon className="size-3.5" /> {title}
+      </div>
+      <div className="text-xs leading-snug mt-1 opacity-95">{body}</div>
+    </div>
+  );
 }
 
 export default function Pipeline() {
-  const router = useRouter();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState<PipelineStage | null>(null);
+  const [view, setView] = useState<View>('admin');
 
   const [query, setQuery] = useState('');
   const [service, setService] = useState('');
   const [priority, setPriority] = useState('');
+  const [city, setCity] = useState('');
   const [stageFilter, setStageFilter] = useState('');
 
+  const services = useMemo(() => Array.from(new Set(leads.map((l) => l.service_type).filter(Boolean) as string[])), [leads]);
+  const cities = useMemo(() => Array.from(new Set(leads.map((l) => l.city).filter(Boolean) as string[])), [leads]);
+
   useEffect(() => {
-    void fetchPipeline();
+    void loadLeads();
   }, []);
 
-  async function fetchPipeline() {
+  async function loadLeads() {
     setLoading(true);
     setError(null);
-
     const { data, error } = await supabase
       .from('leads')
-      .select('id,name,email,phone,city,pipeline_stage,priority,service_type,utility_company,created_at,archived')
+      .select('id,name,phone,email,utility_company,service_type,pipeline_stage,priority,city,created_at,archived')
       .eq('archived', false)
       .order('created_at', { ascending: false });
 
-    if (error) setError(error.message || 'Unable to load pipeline.');
+    if (error) setError(error.message || 'Unable to load pipeline');
     else setLeads((data || []) as Lead[]);
-
     setLoading(false);
   }
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return leads.filter((lead) => {
-      const stage = lead.pipeline_stage || 'New Lead';
-      if (service && (lead.service_type || '') !== service) return false;
-      if (priority && (lead.priority || '') !== priority) return false;
-      if (stageFilter && stage !== stageFilter) return false;
-      if (!q) return true;
-      const hay = `${lead.name || ''} ${lead.phone || ''} ${lead.email || ''} ${lead.utility_company || ''} ${lead.city || ''} ${stage}`.toLowerCase();
-      return hay.includes(q);
-    });
-  }, [leads, priority, query, service, stageFilter]);
+  async function onDrop(stage: PipelineStage) {
+    setDragOver(null);
+    if (!dragId) return;
 
-  const services = useMemo(() => {
-    const set = new Set<string>();
-    leads.forEach((l) => {
-      if (l.service_type) set.add(l.service_type);
-    });
-    return Array.from(set.values()).sort();
-  }, [leads]);
+    const current = leads.find((l) => l.id === dragId);
+    setLeads((all) => all.map((l) => (l.id === dragId ? { ...l, pipeline_stage: stage } : l)));
+    setDragId(null);
 
-  const activeFilters = [service, priority, stageFilter].filter(Boolean).length;
-
-  const totalValue = filtered.reduce((sum, lead) => sum + stageValue(lead.pipeline_stage || 'New Lead'), 0);
-
-  const byStage = useMemo(() => {
-    return STAGES.map((stage) => ({
-      stage,
-      items: filtered.filter((lead) => (lead.pipeline_stage || 'New Lead') === stage),
-    }));
-  }, [filtered]);
-
-  const insights = {
-    followUpToday: filtered.filter((l) => (l.pipeline_stage || '') !== 'Commission Paid' && (l.pipeline_stage || '') !== 'Installed').length,
-    hotStuck: filtered.filter((l) => priorityClass(l.priority) === 'high' && ['Contacted', 'Appointment Set', 'Proposal Sent'].includes(l.pipeline_stage || '')).length,
-    creditReady: filtered.filter((l) => ['Proposal Sent', 'Credit Approved'].includes(l.pipeline_stage || '')).length,
-    atRisk: filtered.filter((l) => (l.pipeline_stage || '') === 'Permit' || priorityClass(l.priority) === 'high').length,
-    commissions: filtered.filter((l) => (l.pipeline_stage || '') === 'PTO').length,
-  };
+    if (current && stageFromLead(current) !== stage) {
+      const { error } = await supabase.from('leads').update({ pipeline_stage: stage }).eq('id', current.id);
+      if (error) {
+        setError(error.message || 'Unable to update stage');
+        await loadLeads();
+      }
+    }
+  }
 
   function clearFilters() {
     setService('');
     setPriority('');
+    setCity('');
     setStageFilter('');
   }
 
+  const activeFilterCount = [service, priority, city, stageFilter].filter(Boolean).length;
+
+  const filtered = useMemo(() => {
+    return leads.filter((l) => {
+      if (view === 'rep' && !(l.name || '').toLowerCase().includes('diego')) return false;
+      if (query) {
+        const q = query.toLowerCase();
+        const hay = `${l.name || ''} ${l.phone || ''} ${l.email || ''} ${l.utility_company || ''} ${l.city || ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (service && l.service_type !== service) return false;
+      if (priority && l.priority !== priority) return false;
+      if (city && l.city !== city) return false;
+      if (stageFilter && stageFromLead(l) !== stageFilter) return false;
+      return true;
+    });
+  }, [leads, view, query, service, priority, city, stageFilter]);
+
+  const totalValue = useMemo(() => filtered.reduce((s, l) => s + STAGE_VALUE[stageFromLead(l)], 0), [filtered]);
+
+  const followToday = filtered.filter((l) => !['Installed', 'PTO', 'Commission Paid'].includes(stageFromLead(l))).length;
+  const hotStuck = filtered.filter((l) => (l.priority || '').toLowerCase().includes('high') && ['Contacted', 'Appointment Set', 'Proposal Sent'].includes(stageFromLead(l))).length;
+  const creditReady = filtered.filter((l) => ['Proposal Sent', 'Credit Approved'].includes(stageFromLead(l))).length;
+  const toClose = filtered.filter((l) => stageFromLead(l) === 'Proposal Sent').length;
+  const atRisk = filtered.filter((l) => stageFromLead(l) === 'Permit' || (l.priority || '').toLowerCase().includes('high')).length;
+  const commissionDue = filtered.filter((l) => stageFromLead(l) === 'PTO').length;
+
   if (loading) {
-    return (
-      <div className="pipeline-wrap">
-        <Topbar
-          eyebrow="Sales Operations"
-          title="Pipeline"
-          subtitle="Loading live board state and activity indicators."
-        />
-        <div className="loading-box">Loading leads...</div>
-      </div>
-    );
+    return <div className="p-4 lg:p-6 text-sm text-muted-foreground">Loading pipeline...</div>;
   }
 
   if (error) {
     return (
-      <div className="error-box">
-        <h2>Pipeline unavailable</h2>
-        <p>{error}</p>
-        <button type="button" onClick={fetchPipeline}>Retry</button>
+      <div className="p-4 lg:p-6">
+        <div className="bg-card rounded-xl border border-destructive/30 p-4 text-destructive">{error}</div>
       </div>
     );
   }
 
   return (
-    <div className="pipeline-wrap">
-      <Topbar
+    <div className="p-4 lg:p-6 min-h-screen flex flex-col bg-background text-foreground">
+      <PageHeader
         eyebrow="Sales · Command Center"
         title="Pipeline"
-        subtitle={`${filtered.length} leads · ${fmtCurrency(totalValue)} weighted value · synced with project tracker`}
+        subtitle={`${filtered.length} leads · ${fmtCurrency(totalValue)} weighted value · synced to project tracker`}
+        actions={
+          <div className="hidden md:inline-flex items-center bg-secondary rounded-md p-0.5 border border-border">
+            <ViewBtn active={view === 'rep'} onClick={() => setView('rep')} icon={User} label="Sales Rep" />
+            <ViewBtn active={view === 'admin'} onClick={() => setView('admin')} icon={Users} label="Admin" />
+          </div>
+        }
       />
 
-      <section className="search-card">
-        <div className="search-row">
-          <Search size={15} className="search-icon" />
+      <div className="bg-card border border-border rounded-xl p-3 mb-4 space-y-3 shadow-card">
+        <div className="relative">
+          <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by name, phone, email, city, utility, or stage..."
+            placeholder="Search by customer name, phone, email, city, or utility"
+            className="w-full pl-9 pr-9 py-2.5 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
           />
           {query && (
-            <button type="button" className="clear-btn" onClick={() => setQuery('')}>
-              <X size={14} />
+            <button onClick={() => setQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" type="button">
+              <X className="size-4" />
             </button>
           )}
         </div>
 
-        <div className="filter-row">
-          <div className="filter-label"><Filter size={13} /> Filters {activeFilters > 0 ? <span className="count">{activeFilters}</span> : null}</div>
-          <select value={service} onChange={(e) => setService(e.target.value)}>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground px-1">
+            <Filter className="size-3.5" /> Filters
+            {activeFilterCount > 0 && (
+              <span className="ml-1 inline-flex items-center justify-center bg-primary text-primary-foreground text-[10px] font-bold rounded-full size-4">
+                {activeFilterCount}
+              </span>
+            )}
+          </div>
+
+          <select value={service} onChange={(e) => setService(e.target.value)} className="text-xs rounded-md border border-input bg-background px-2 py-1.5">
             <option value="">Service: All</option>
-            {services.map((item) => <option key={item} value={item}>{item}</option>)}
+            {services.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
-          <select value={priority} onChange={(e) => setPriority(e.target.value)}>
+
+          <select value={priority} onChange={(e) => setPriority(e.target.value)} className="text-xs rounded-md border border-input bg-background px-2 py-1.5">
             <option value="">Priority: All</option>
             <option value="High">High</option>
             <option value="Medium">Medium</option>
             <option value="Low">Low</option>
           </select>
-          <select value={stageFilter} onChange={(e) => setStageFilter(e.target.value)}>
-            <option value="">Stage: All</option>
-            {STAGES.map((stage) => <option key={stage} value={stage}>{stage}</option>)}
-          </select>
-          {activeFilters > 0 && <button type="button" className="clear-all" onClick={clearFilters}>Clear all</button>}
-        </div>
-      </section>
 
-      <section className="insights">
-        <div className="insight-head">
-          <div className="sun"><Sun size={14} /></div>
+          <select value={city} onChange={(e) => setCity(e.target.value)} className="text-xs rounded-md border border-input bg-background px-2 py-1.5">
+            <option value="">City: All</option>
+            {cities.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+
+          <select value={stageFilter} onChange={(e) => setStageFilter(e.target.value)} className="text-xs rounded-md border border-input bg-background px-2 py-1.5">
+            <option value="">Stage: All</option>
+            {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+
+          {activeFilterCount > 0 && (
+            <button onClick={clearFilters} className="text-xs text-primary font-semibold hover:underline ml-auto" type="button">
+              Clear all
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-gradient-to-r from-navy via-primary to-navy text-primary-foreground rounded-xl border border-border p-4 shadow-elegant">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="size-7 rounded-md bg-gold grid place-items-center">
+            <Sun className="size-4 text-gold-foreground" strokeWidth={2.5} />
+          </div>
           <div>
-            <strong>MDB AI · Pipeline Brief</strong>
-            <p>Live analysis from your visible board</p>
+            <div className="text-sm font-bold">MDB AI · Pipeline Brief</div>
+            <div className="text-[10px] opacity-70 uppercase tracking-wider">Live analysis of your visible board</div>
           </div>
         </div>
-        <div className="insight-grid">
-          <div className="insight-chip"><Clock size={13} /> {insights.followUpToday} Follow up today</div>
-          <div className="insight-chip danger"><Flame size={13} /> {insights.hotStuck} Hot and stuck</div>
-          <div className="insight-chip success"><ShieldCheck size={13} /> {insights.creditReady} Credit ready</div>
-          <div className="insight-chip gold"><FileText size={13} /> {insights.creditReady} Proposals to close</div>
-          <div className="insight-chip danger"><AlertTriangle size={13} /> {insights.atRisk} Projects at risk</div>
-          <div className="insight-chip gold"><DollarSign size={13} /> {insights.commissions} Commission pending</div>
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2">
+          <Insight icon={Clock} n={followToday} label="Follow up today" tone="warning" />
+          <Insight icon={Flame} n={hotStuck} label="Hot & stuck" tone="danger" />
+          <Insight icon={ShieldCheck} n={creditReady} label="Credit ready" tone="success" />
+          <Insight icon={FileText} n={toClose} label="Proposals to close" tone="gold" />
+          <Insight icon={AlertTriangle} n={atRisk} label="Projects at risk" tone="danger" />
+          <Insight icon={DollarSign} n={commissionDue} label="Commission pending" tone="gold" />
         </div>
-      </section>
+        <div className="mt-3 grid md:grid-cols-2 gap-2 text-xs">
+          <Suggestion icon={MessageCircle} title="Suggested WhatsApp" body="Quick check-in drafted for leads in Proposal Sent and Contacted with highest urgency." />
+          <Suggestion icon={Flame} title="Suggested next action" body="Move top high-priority Proposal Sent leads to Credit Approved by sending credit auth now." />
+        </div>
+      </div>
 
-      <section className="board-scroll">
-        <div className="board" style={{ minWidth: `${STAGES.length * 294}px` }}>
-          {byStage.map((col) => {
-            const colValue = col.items.reduce((sum, lead) => sum + stageValue(lead.pipeline_stage || 'New Lead'), 0);
+      <div className="flex-1 min-h-0 overflow-x-auto -mx-4 lg:-mx-6 px-4 lg:px-6 pb-6 mt-4">
+        <div className="flex gap-3 h-full" style={{ minWidth: `${STAGES.length * 304}px` }}>
+          {STAGES.map((stage) => {
+            const items = filtered.filter((l) => stageFromLead(l) === stage);
+            const colValue = items.reduce((s, l) => s + STAGE_VALUE[stage], 0);
+            const isOver = dragOver === stage;
+
             return (
-              <article key={col.stage} className="column">
-                <header className="col-head">
-                  <div className="name">{col.stage}</div>
-                  <div className="pill">{col.items.length}</div>
-                </header>
-                <div className="col-sub">{fmtCurrency(colValue)} pipeline</div>
-                <div className="col-body">
-                  {col.items.length === 0 && <div className="empty">No leads</div>}
-                  {col.items.map((lead) => (
-                    <div key={lead.id} className="lead-card" role="button" tabIndex={0} onClick={() => router.push(`/leads/${lead.id}`)}>
-                      <div className="lead-head">
-                        <div className="lead-title">{lead.name || 'Unnamed Lead'}</div>
-                        <span className={`priority ${priorityClass(lead.priority)}`}>{lead.priority || 'Low'}</span>
-                      </div>
-
-                      <div className="line"><ServicePill service={lead.service_type || 'Solar'} /><span>· {lead.utility_company || 'Unknown Utility'}</span></div>
-                      <div className="meta">{lead.city || 'City unavailable'}</div>
-
-                      <div className="actions">
-                        <button type="button" title="Call" onClick={(e) => { e.stopPropagation(); if (lead.phone) window.open(`tel:${lead.phone}`); }}><Phone size={13} /></button>
-                        <button type="button" title="SMS" onClick={(e) => { e.stopPropagation(); if (lead.phone) window.open(`sms:${lead.phone}`); }}><MessageSquare size={13} /></button>
-                        <button type="button" title="Email" onClick={(e) => { e.stopPropagation(); if (lead.email) window.open(`mailto:${lead.email}`); }}><Mail size={13} /></button>
-                        <Link href={`/proposals?lead_id=${lead.id}`} onClick={(e) => e.stopPropagation()} title="Proposal"><FileText size={13} /></Link>
-                        <button type="button" title="Open" onClick={(e) => { e.stopPropagation(); router.push(`/leads/${lead.id}`); }}><ExternalLink size={13} /></button>
-                      </div>
-                    </div>
-                  ))}
+              <div
+                key={stage}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOver(stage);
+                }}
+                onDragLeave={() => setDragOver((s) => (s === stage ? null : s))}
+                onDrop={() => void onDrop(stage)}
+                className={`w-[292px] shrink-0 flex flex-col rounded-xl border transition-all ${
+                  isOver ? 'border-gold bg-gold/10 ring-2 ring-gold/40' : 'border-border bg-secondary/40'
+                }`}
+              >
+                <div className="px-3 py-2.5 border-b border-border">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-bold text-foreground uppercase tracking-wide">{stage}</div>
+                    <div className="text-[10px] font-bold text-foreground bg-card border border-border px-1.5 py-0.5 rounded">{items.length}</div>
+                  </div>
+                  <div className="text-[10px] text-muted-foreground mt-1 font-medium">{fmtCurrency(colValue)} pipeline</div>
                 </div>
-              </article>
+
+                <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                  {items.map((lead) => {
+                    const badges = inferBadges(lead);
+                    const priorityRing =
+                      (lead.priority || '').toLowerCase().includes('high')
+                        ? 'border-l-destructive'
+                        : (lead.priority || '').toLowerCase().includes('med')
+                        ? 'border-l-gold'
+                        : 'border-l-border';
+
+                    return (
+                      <div
+                        key={lead.id}
+                        draggable
+                        onDragStart={() => setDragId(lead.id)}
+                        onDragEnd={() => {
+                          setDragId(null);
+                          setDragOver(null);
+                        }}
+                        className={`group bg-card rounded-lg border border-border border-l-[3px] ${priorityRing} p-3 shadow-card hover:border-primary/50 hover:shadow-elegant transition-all cursor-grab active:cursor-grabbing ${
+                          dragId === lead.id ? 'opacity-40 scale-95' : ''
+                        }`}
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <div className="size-8 shrink-0 rounded-full bg-gradient-to-br from-primary to-navy text-primary-foreground grid place-items-center text-[10px] font-bold">
+                            {(lead.name || 'U').split(' ').map((s) => s[0]).join('').slice(0, 2)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-semibold text-foreground truncate">{lead.name || 'Unnamed Lead'}</div>
+                            <div className="text-[10px] text-muted-foreground truncate">{lead.city || 'City N/A'}</div>
+                          </div>
+                          <PriorityChip priority={lead.priority} />
+                        </div>
+
+                        <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
+                          <ServicePill service={lead.service_type || 'Solar'} />
+                          <span className="text-[10px] font-medium text-muted-foreground">· {lead.utility_company || 'Utility N/A'}</span>
+                        </div>
+
+                        {badges.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {badges.map((b) => <BadgeChip key={`${lead.id}-${b}`} badge={b} />)}
+                          </div>
+                        )}
+
+                        <div className="mt-2.5 pt-2 border-t border-border flex items-center gap-1">
+                          <button title="Call" onClick={() => lead.phone && window.open(`tel:${lead.phone}`)} className="inline-flex items-center justify-center size-7 rounded text-muted-foreground hover:text-primary hover:bg-secondary transition-colors" type="button">
+                            <Phone className="size-3.5" />
+                          </button>
+                          <button title="SMS" onClick={() => lead.phone && window.open(`sms:${lead.phone}`)} className="inline-flex items-center justify-center size-7 rounded text-muted-foreground hover:text-primary hover:bg-secondary transition-colors" type="button">
+                            <MessageSquare className="size-3.5" />
+                          </button>
+                          <button title="WhatsApp" onClick={() => lead.phone && window.open(`https://wa.me/${(lead.phone || '').replace(/\D/g, '')}`)} className="inline-flex items-center justify-center size-7 rounded text-success hover:text-primary hover:bg-secondary transition-colors" type="button">
+                            <MessageCircle className="size-3.5" />
+                          </button>
+                          <button title="Email" onClick={() => lead.email && window.open(`mailto:${lead.email}`)} className="inline-flex items-center justify-center size-7 rounded text-muted-foreground hover:text-primary hover:bg-secondary transition-colors" type="button">
+                            <Mail className="size-3.5" />
+                          </button>
+
+                          <Link href={`/proposals?lead_id=${lead.id}`} className="ml-auto inline-flex items-center justify-center size-7 rounded text-muted-foreground hover:text-gold hover:bg-secondary" title="Create Proposal">
+                            <FileText className="size-3.5" />
+                          </Link>
+
+                          <Link href={`/leads/${lead.id}`} className="inline-flex items-center justify-center size-7 rounded text-primary hover:bg-primary/10" title="Open Lead">
+                            <ExternalLink className="size-3.5" />
+                          </Link>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {items.length === 0 && <div className="text-[11px] text-muted-foreground text-center py-8 border border-dashed border-border rounded-lg">Drop a lead here</div>}
+                </div>
+              </div>
             );
           })}
         </div>
-      </section>
-
-      <style jsx>{`
-        .pipeline-wrap {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-        }
-        .search-card {
-          border: 1px solid var(--mdb-border);
-          border-radius: var(--mdb-radius);
-          background: var(--mdb-card);
-          padding: 10px;
-          box-shadow: var(--mdb-shadow-card);
-        }
-        .search-row {
-          position: relative;
-          margin-bottom: 8px;
-        }
-        .search-row input {
-          width: 100%;
-          border: 1px solid var(--mdb-border);
-          border-radius: 8px;
-          padding: 9px 32px;
-          margin: 0;
-          background: color-mix(in srgb, var(--mdb-secondary) 42%, white);
-        }
-        .search-icon {
-          position: absolute;
-          left: 10px;
-          top: 10px;
-          color: var(--mdb-muted);
-        }
-        .clear-btn {
-          position: absolute;
-          right: 7px;
-          top: 6px;
-          border: none;
-          background: transparent;
-          color: var(--mdb-muted);
-          width: 24px;
-          height: 24px;
-          border-radius: 6px;
-          display: grid;
-          place-items: center;
-        }
-        .filter-row {
-          display: flex;
-          flex-wrap: wrap;
-          align-items: center;
-          gap: 7px;
-        }
-        .filter-label {
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-          font-size: 11px;
-          text-transform: uppercase;
-          letter-spacing: 0.08em;
-          color: var(--mdb-muted);
-          font-weight: 700;
-          margin-right: 2px;
-        }
-        .count {
-          width: 16px;
-          height: 16px;
-          border-radius: 999px;
-          display: grid;
-          place-items: center;
-          background: var(--mdb-primary);
-          color: #fff;
-          font-size: 10px;
-        }
-        select {
-          border: 1px solid var(--mdb-border);
-          border-radius: 8px;
-          margin: 0;
-          font-size: 12px;
-          padding: 6px 8px;
-          background: var(--mdb-card);
-        }
-        .clear-all {
-          border: none;
-          background: transparent;
-          color: var(--mdb-primary);
-          font-size: 12px;
-          font-weight: 700;
-          margin-left: auto;
-        }
-        .insights {
-          border-radius: var(--mdb-radius);
-          padding: 12px;
-          background: linear-gradient(120deg, var(--mdb-navy), var(--mdb-primary));
-          color: #fff;
-          border: 1px solid color-mix(in srgb, var(--mdb-navy) 65%, #fff);
-          box-shadow: var(--mdb-shadow-elegant);
-        }
-        .insight-head {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          margin-bottom: 10px;
-        }
-        .sun {
-          width: 26px;
-          height: 26px;
-          border-radius: 8px;
-          background: color-mix(in srgb, var(--mdb-gold) 80%, white);
-          color: #111827;
-          display: grid;
-          place-items: center;
-        }
-        .insight-head strong {
-          font-size: 0.84rem;
-        }
-        .insight-head p {
-          margin: 2px 0 0;
-          font-size: 10px;
-          text-transform: uppercase;
-          letter-spacing: 0.1em;
-          opacity: 0.75;
-        }
-        .insight-grid {
-          display: grid;
-          grid-template-columns: repeat(6, minmax(0, 1fr));
-          gap: 7px;
-        }
-        .insight-chip {
-          background: color-mix(in srgb, #fff 12%, transparent);
-          border: 1px solid color-mix(in srgb, #fff 25%, transparent);
-          border-radius: 9px;
-          padding: 8px;
-          font-size: 11px;
-          font-weight: 600;
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-        }
-        .insight-chip.danger {
-          color: #fecaca;
-        }
-        .insight-chip.success {
-          color: #bbf7d0;
-        }
-        .insight-chip.gold {
-          color: #fde68a;
-        }
-        .board-scroll {
-          overflow-x: auto;
-          margin: 0 -16px;
-          padding: 0 16px 10px;
-        }
-        .board {
-          display: flex;
-          gap: 8px;
-        }
-        .column {
-          width: 286px;
-          flex-shrink: 0;
-          border: 1px solid var(--mdb-border);
-          border-radius: var(--mdb-radius);
-          background: color-mix(in srgb, var(--mdb-secondary) 38%, white);
-          display: flex;
-          flex-direction: column;
-          max-height: calc(100vh - 275px);
-          min-height: 450px;
-        }
-        .col-head {
-          padding: 10px 10px 5px;
-          border-bottom: 1px solid var(--mdb-border);
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-        }
-        .name {
-          font-size: 11px;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-          font-weight: 800;
-          color: var(--mdb-foreground);
-        }
-        .pill {
-          min-width: 20px;
-          text-align: center;
-          border-radius: 6px;
-          border: 1px solid var(--mdb-border);
-          padding: 2px 6px;
-          font-size: 11px;
-          font-weight: 700;
-          background: var(--mdb-card);
-        }
-        .col-sub {
-          padding: 6px 10px;
-          color: var(--mdb-muted);
-          font-size: 10px;
-          text-transform: uppercase;
-          letter-spacing: 0.08em;
-          border-bottom: 1px solid var(--mdb-border);
-        }
-        .col-body {
-          padding: 8px;
-          display: flex;
-          flex-direction: column;
-          gap: 7px;
-          overflow-y: auto;
-        }
-        .empty {
-          border: 1px dashed var(--mdb-border);
-          border-radius: 8px;
-          color: var(--mdb-muted);
-          font-size: 12px;
-          text-align: center;
-          padding: 18px 8px;
-        }
-        .lead-card {
-          border: 1px solid var(--mdb-border);
-          border-left: 3px solid color-mix(in srgb, var(--mdb-primary) 45%, var(--mdb-border));
-          border-radius: 10px;
-          background: var(--mdb-card);
-          padding: 9px;
-          box-shadow: var(--mdb-shadow-card);
-          cursor: pointer;
-        }
-        .lead-head {
-          display: flex;
-          justify-content: space-between;
-          gap: 7px;
-          align-items: flex-start;
-        }
-        .lead-title {
-          font-size: 0.86rem;
-          color: var(--mdb-foreground);
-          font-weight: 700;
-        }
-        .priority {
-          border-radius: 999px;
-          padding: 2px 7px;
-          font-size: 9px;
-          text-transform: uppercase;
-          letter-spacing: 0.06em;
-          font-weight: 800;
-          border: 1px solid transparent;
-          white-space: nowrap;
-        }
-        .priority.high {
-          color: #b91c1c;
-          background: color-mix(in srgb, #ef4444 18%, white);
-          border-color: color-mix(in srgb, #ef4444 35%, var(--mdb-border));
-        }
-        .priority.medium {
-          color: #92400e;
-          background: color-mix(in srgb, var(--mdb-gold) 18%, white);
-          border-color: color-mix(in srgb, var(--mdb-gold) 35%, var(--mdb-border));
-        }
-        .priority.low {
-          color: var(--mdb-muted);
-          background: color-mix(in srgb, var(--mdb-secondary) 55%, white);
-          border-color: var(--mdb-border);
-        }
-        .line {
-          margin-top: 7px;
-          display: flex;
-          align-items: center;
-          gap: 5px;
-          flex-wrap: wrap;
-        }
-        .line span {
-          font-size: 11px;
-          color: var(--mdb-muted);
-        }
-        .meta {
-          margin-top: 5px;
-          font-size: 11px;
-          color: var(--mdb-muted);
-        }
-        .actions {
-          margin-top: 8px;
-          padding-top: 8px;
-          border-top: 1px solid var(--mdb-border);
-          display: flex;
-          align-items: center;
-          gap: 5px;
-        }
-        .actions button,
-        .actions :global(a) {
-          width: 26px;
-          height: 26px;
-          border-radius: 7px;
-          border: none;
-          color: var(--mdb-muted);
-          background: transparent;
-          display: grid;
-          place-items: center;
-        }
-        .actions button:hover,
-        .actions :global(a:hover) {
-          color: var(--mdb-primary);
-          background: color-mix(in srgb, var(--mdb-primary) 9%, white);
-        }
-        .loading-box,
-        .error-box {
-          border: 1px solid var(--mdb-border);
-          border-radius: var(--mdb-radius);
-          background: var(--mdb-card);
-          padding: 16px;
-        }
-        .error-box {
-          border-color: color-mix(in srgb, #ef4444 30%, var(--mdb-border));
-          background: color-mix(in srgb, #ef4444 8%, white);
-        }
-        .error-box h2 {
-          margin: 0;
-          color: #991b1b;
-          font-size: 1rem;
-        }
-        .error-box p {
-          margin: 8px 0 10px;
-          color: #b91c1c;
-        }
-        .error-box button {
-          border: 1px solid #fca5a5;
-          border-radius: 8px;
-          padding: 7px 10px;
-          background: #fff;
-          color: #991b1b;
-          font-weight: 700;
-        }
-        @media (max-width: 1280px) {
-          .insight-grid {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-          }
-        }
-        @media (max-width: 900px) {
-          .board-scroll {
-            margin: 0 -12px;
-            padding: 0 12px 8px;
-          }
-          .insight-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-        }
-        @media (max-width: 620px) {
-          .insight-grid {
-            grid-template-columns: 1fr;
-          }
-          .filter-row select {
-            flex: 1 1 100%;
-          }
-        }
-      `}</style>
+      </div>
     </div>
   );
 }

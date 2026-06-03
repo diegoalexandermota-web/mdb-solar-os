@@ -1,83 +1,66 @@
 import type { ReactNode } from 'react';
 
-export function Topbar({ eyebrow, title, subtitle, actions }: { eyebrow?: string; title: string; subtitle?: string; actions?: ReactNode }) {
+export function PageHeader({
+  eyebrow,
+  title,
+  subtitle,
+  actions,
+}: {
+  eyebrow?: string;
+  title: string;
+  subtitle?: string;
+  actions?: ReactNode;
+}) {
   return (
-    <div className="page-header">
-      <div className="header-copy">
-        {eyebrow && <div className="eyebrow">{eyebrow}</div>}
-        <h1>{title}</h1>
-        {subtitle && <p>{subtitle}</p>}
+    <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
+      <div className="space-y-1.5 min-w-0">
+        {eyebrow && <div className="text-[11px] font-semibold uppercase tracking-widest text-primary">{eyebrow}</div>}
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">{title}</h1>
+        {subtitle && <p className="text-sm text-muted-foreground max-w-2xl">{subtitle}</p>}
       </div>
-      {actions && <div className="header-actions">{actions}</div>}
-
-      <style jsx>{`
-        .page-header {
-          display: flex;
-          flex-wrap: wrap;
-          align-items: flex-end;
-          justify-content: space-between;
-          gap: 14px;
-          margin-bottom: 16px;
-        }
-        .header-copy {
-          min-width: 0;
-        }
-        .eyebrow {
-          font-size: 11px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.12em;
-          color: var(--mdb-primary);
-        }
-        h1 {
-          margin: 8px 0 0;
-          font-size: 1.78rem;
-          line-height: 1.1;
-          letter-spacing: -0.03em;
-          color: var(--mdb-foreground);
-        }
-        p {
-          margin: 8px 0 0;
-          font-size: 0.92rem;
-          color: var(--mdb-muted);
-          max-width: 820px;
-        }
-        .header-actions {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-        }
-      `}</style>
+      {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </div>
   );
 }
 
 export function StageBadge({ stage }: { stage: string }) {
   const map: Record<string, string> = {
-    'New Lead': 'stage secondary',
-    Contacted: 'stage primary',
-    'Appointment Set': 'stage primary',
-    'Proposal Sent': 'stage gold',
-    'Credit Approved': 'stage success',
-    'Contract Signed': 'stage success',
-    'Site Survey': 'stage primary',
-    Permit: 'stage warning',
-    'Install Scheduled': 'stage primary',
-    Installed: 'stage success',
-    PTO: 'stage success',
-    'Commission Paid': 'stage gold',
+    'New Lead': 'bg-secondary text-secondary-foreground',
+    Contacted: 'bg-primary/10 text-primary',
+    'Appointment Set': 'bg-primary/15 text-primary',
+    'Proposal Sent': 'bg-gold/20 text-navy',
+    'Credit Approved': 'bg-success/15 text-success',
+    'Contract Signed': 'bg-success/20 text-success',
+    'Site Survey': 'bg-primary-glow/15 text-primary',
+    Permit: 'bg-warning/20 text-navy',
+    'Install Scheduled': 'bg-primary/15 text-primary',
+    Installed: 'bg-success/20 text-success',
+    PTO: 'bg-success/25 text-success',
+    'Commission Paid': 'bg-gold/30 text-navy',
   };
-  return <span className={map[stage] || 'stage secondary'}>{stage}</span>;
+
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium uppercase tracking-wide ${map[stage] ?? 'bg-secondary'}`}>
+      {stage}
+    </span>
+  );
 }
 
 export function ServicePill({ service }: { service: string }) {
   const map: Record<string, string> = {
-    Solar: 'service gold',
-    Water: 'service sky',
-    Roofing: 'service orange',
-    HVAC: 'service emerald',
-    Battery: 'service violet',
-    'EV Charger': 'service cyan',
+    Solar: 'bg-gold/20 text-navy border-gold/40',
+    Water: 'bg-sky-100 text-sky-900 border-sky-300',
+    Roofing: 'bg-orange-100 text-orange-900 border-orange-300',
+    HVAC: 'bg-emerald-100 text-emerald-900 border-emerald-300',
+    Battery: 'bg-violet-100 text-violet-900 border-violet-300',
+    'EV Charger': 'bg-cyan-100 text-cyan-900 border-cyan-300',
   };
-  return <span className={map[service] || 'service gray'}>{service}</span>;
+
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold border ${map[service] ?? 'bg-secondary'}`}>
+      {service}
+    </span>
+  );
 }
+
+export const Topbar = PageHeader;
