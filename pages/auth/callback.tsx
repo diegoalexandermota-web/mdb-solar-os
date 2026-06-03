@@ -9,10 +9,18 @@ export default function AuthCallback() {
     if (!router.isReady) return;
 
     const exchangeCode = async () => {
-      // Password recovery links commonly arrive with tokens in the URL hash.
-      if (typeof window !== 'undefined' && window.location.hash.includes('type=recovery')) {
-        router.replace(`/reset-password${window.location.hash}`);
-        return;
+      // Supabase recovery links provide tokens in the URL hash, not query params.
+      if (typeof window !== 'undefined') {
+        const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
+        const hashParams = new URLSearchParams(hash);
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+        const type = hashParams.get('type');
+
+        if (type === 'recovery' && accessToken && refreshToken) {
+          window.location.href = `/reset-password${window.location.hash}`;
+          return;
+        }
       }
 
       const rawCode = router.query.code;

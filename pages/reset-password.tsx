@@ -11,14 +11,31 @@ export default function ResetPassword() {
   const [saving, setSaving] = useState(false);
   const [ready, setReady] = useState(false);
   const [hasRecoverySession, setHasRecoverySession] = useState(false);
+  const [sessionCheckMessage, setSessionCheckMessage] = useState('Checking recovery session...');
 
   useEffect(() => {
     let mounted = true;
+    const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
     const resolveSession = async () => {
-      const { data } = await supabase.auth.getSession();
+      // Recovery session can take a moment to hydrate from hash tokens.
+      const attempts = [0, 300, 700, 1200];
+      let hasSession = false;
+
+      for (let i = 0; i < attempts.length; i++) {
+        if (i > 0) {
+          setSessionCheckMessage('Finalizing recovery session...');
+          await wait(attempts[i]);
+        }
+        const { data } = await supabase.auth.getSession();
+        if (data.session) {
+          hasSession = true;
+          break;
+        }
+      }
+
       if (!mounted) return;
-      setHasRecoverySession(!!data.session);
+      setHasRecoverySession(hasSession);
       setReady(true);
     };
 
@@ -88,7 +105,7 @@ export default function ResetPassword() {
 
           <h2 className="reset-heading">Reset your password</h2>
 
-          {!ready && <div className="reset-info">Checking recovery session...</div>}
+          {!ready && <div className="reset-info">{sessionCheckMessage}</div>}
 
           {ready && !hasRecoverySession && (
             <div className="reset-info">
