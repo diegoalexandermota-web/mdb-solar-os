@@ -21,37 +21,52 @@ export default function Login() {
 
   useEffect(() => {
     let isMounted = true;
+    let subscription: { unsubscribe: () => void } | null = null;
 
-    // Recovery links can arrive directly on /login with hash tokens.
-    if (typeof window !== 'undefined') {
-      const hash = window.location.hash || '';
-      if (hash.includes('type=recovery') || hash.includes('access_token')) {
-        window.location.href = `/reset-password${hash}`;
-        return;
+    const bootstrapAuth = async () => {
+      // Handle hash-based auth first to prevent session guards from intercepting recovery.
+      if (typeof window !== 'undefined') {
+        const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
+        const hashParams = new URLSearchParams(hash);
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+        const type = hashParams.get('type');
+
+        if (accessToken && refreshToken) {
+          await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+
+          if (type === 'recovery') {
+            window.location.replace('/reset-password');
+          } else {
+            window.location.replace('/dashboard');
+          }
+          return;
+        }
       }
-    }
 
-    const redirectIfSessionExists = async () => {
       const { data } = await supabase.auth.getSession();
       if (!isMounted) return;
       if (data.session) {
         router.replace('/dashboard');
+        return;
       }
+
+      const authState = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+          router.replace('/dashboard');
+        }
+      });
+      subscription = authState.data.subscription;
     };
 
-    redirectIfSessionExists();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        router.replace('/dashboard');
-      }
-    });
+    bootstrapAuth();
 
     return () => {
       isMounted = false;
-      subscription.unsubscribe();
+      subscription?.unsubscribe();
     };
   }, [router]);
 

@@ -9,7 +9,7 @@ export default function AuthCallback() {
     if (!router.isReady) return;
 
     const exchangeCode = async () => {
-      // Supabase recovery links provide tokens in the URL hash, not query params.
+      // Supabase recovery and hash-based auth links provide tokens in the URL hash.
       if (typeof window !== 'undefined') {
         const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
         const hashParams = new URLSearchParams(hash);
@@ -17,8 +17,17 @@ export default function AuthCallback() {
         const refreshToken = hashParams.get('refresh_token');
         const type = hashParams.get('type');
 
-        if (type === 'recovery' && accessToken && refreshToken) {
-          window.location.href = `/reset-password${window.location.hash}`;
+        if (accessToken && refreshToken) {
+          await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+
+          if (type === 'recovery') {
+            window.location.replace('/reset-password');
+          } else {
+            window.location.replace('/dashboard');
+          }
           return;
         }
       }

@@ -47,6 +47,7 @@ export default function ResetPassword() {
       if (!mounted) return;
       if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
         setHasRecoverySession(!!session);
+        setReady(true);
       }
     });
 
