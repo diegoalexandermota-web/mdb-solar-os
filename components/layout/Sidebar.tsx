@@ -1,164 +1,419 @@
+import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
+import {
+  LayoutDashboard,
+  Kanban,
+  CheckSquare,
+  FileText,
+  HardHat,
+  Trophy,
+  Sun,
+  Shield,
+  Wallet,
+  Users,
+  Calendar,
+  UserSquare2,
+  Banknote,
+  FileSignature,
+  Wrench,
+  Stamp,
+  ClipboardCheck,
+  Zap,
+  LifeBuoy,
+  FolderOpen,
+  Sparkles,
+  Bot,
+  Megaphone,
+  MessageCircle,
+  BarChart3,
+  PieChart,
+  Gauge,
+  Plug,
+  Bell,
+  Settings,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Menu,
+} from 'lucide-react';
 
-type NavItem = {
-  label: string;
-  href: string;
-  soon?: boolean;
-};
+type Item = { href: string; label: string; icon: any; soon?: boolean };
+type Group = { label: string; items: Item[] };
 
-type NavGroup = {
-  title: string;
-  items: NavItem[];
-};
-
-const NAV_GROUPS: NavGroup[] = [
+const GROUPS: Group[] = [
   {
-    title: 'Command Center',
+    label: 'Main',
     items: [
-      { label: 'Dashboard', href: '/dashboard' },
-      { label: 'Pipeline', href: '/pipeline' },
-      { label: 'Leads', href: '/leads' },
-      { label: 'Proposals', href: '/proposals' },
-      { label: 'Tasks', href: '/tasks' },
+      { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { href: '/pipeline', label: 'Pipeline', icon: Kanban },
+      { href: '/leads', label: 'Leads', icon: UserSquare2 },
+      { href: '/tasks', label: 'Tasks', icon: CheckSquare },
+      { href: '/calendar', label: 'Calendar', icon: Calendar, soon: true },
     ],
   },
   {
-    title: 'Experience',
+    label: 'Sales',
     items: [
-      { label: 'Customer Portal', href: '/customer-portal' },
-      { label: 'Solar Design Studio', href: '/solar-design-studio' },
-      { label: 'Commissions', href: '/commissions', soon: true },
+      { href: '/proposals', label: 'Proposal Builder', icon: FileText },
+      { href: '/financing', label: 'Financing', icon: Banknote, soon: true },
+      { href: '/contracts', label: 'Contracts', icon: FileSignature, soon: true },
+      { href: '/commissions', label: 'Commissions', icon: Wallet },
+      { href: '/rep', label: 'Sales Rep', icon: Trophy, soon: true },
+    ],
+  },
+  {
+    label: 'Operations',
+    items: [
+      { href: '/projects', label: 'Project Tracker', icon: HardHat },
+      { href: '/install-queue', label: 'Install Queue', icon: Wrench, soon: true },
+      { href: '/permits', label: 'Permits', icon: Stamp, soon: true },
+      { href: '/inspections', label: 'Inspections', icon: ClipboardCheck, soon: true },
+      { href: '/pto-tracker', label: 'PTO Tracker', icon: Zap, soon: true },
+    ],
+  },
+  {
+    label: 'Customer',
+    items: [
+      { href: '/customer-portal', label: 'Customer Portal', icon: Users },
+      { href: '/support-center', label: 'Support Center', icon: LifeBuoy, soon: true },
+      { href: '/documents', label: 'Documents', icon: FolderOpen, soon: true },
+      { href: '/solar-design-studio', label: 'Solar Design Studio', icon: Sun },
+    ],
+  },
+  {
+    label: 'AI & Automation',
+    items: [
+      { href: '/ai-assistant', label: 'MDB AI Assistant', icon: Sparkles, soon: true },
+      { href: '/automations', label: 'Automations', icon: Bot, soon: true },
+      { href: '/campaigns', label: 'Campaigns', icon: Megaphone, soon: true },
+      { href: '/followups', label: 'Follow-Ups', icon: MessageCircle, soon: true },
+    ],
+  },
+  {
+    label: 'Management',
+    items: [
+      { href: '/reports', label: 'Reports', icon: BarChart3, soon: true },
+      { href: '/analytics', label: 'Analytics', icon: PieChart, soon: true },
+      { href: '/admin', label: 'Admin Console', icon: Shield },
+      { href: '/team-performance', label: 'Team Performance', icon: Gauge, soon: true },
+    ],
+  },
+  {
+    label: 'System',
+    items: [
+      { href: '/integrations', label: 'Integrations', icon: Plug, soon: true },
+      { href: '/notifications', label: 'Notifications', icon: Bell, soon: true },
+      { href: '/settings', label: 'Settings', icon: Settings, soon: true },
     ],
   },
 ];
 
-function isActiveRoute(activePath: string, href: string) {
-  if (activePath === href) return true;
-  if (href !== '/' && activePath.startsWith(`${href}/`)) return true;
-  return false;
+function isActive(pathname: string, href: string) {
+  if (href === '/dashboard') return pathname === '/dashboard';
+  if (href === '/leads') return pathname === '/leads' || pathname.startsWith('/leads/');
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export default function Sidebar({ activePath }: { activePath: string }) {
+function SidebarBody({ pathname, collapsed, onNavigate }: { pathname: string; collapsed: boolean; onNavigate?: () => void }) {
   return (
-    <aside className="shell-sidebar">
-      <div className="shell-brand-row">
-        <div className="shell-logo">
-          <svg width="36" height="36" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="19" cy="19" r="19" fill="#0f172a" />
-            <path d="M19 8L24.5 28H13.5L19 8Z" fill="#f59e0b" />
-          </svg>
+    <nav className="sidebar-body">
+      {GROUPS.map((group) => (
+        <div key={group.label} className="group-wrap">
+          {!collapsed ? <div className="group-title">{group.label}</div> : <div className="divider" />}
+          {group.items.map((item) => {
+            const Icon = item.icon;
+            const active = !item.soon && isActive(pathname, item.href);
+            const content = (
+              <>
+                <Icon className={`nav-icon${active ? ' active' : ''}`} size={16} />
+                {!collapsed && (
+                  <>
+                    <span className="label">{item.label}</span>
+                    {item.soon && <span className="soon">soon</span>}
+                  </>
+                )}
+              </>
+            );
+            if (item.soon) {
+              return (
+                <button key={item.label} type="button" className="nav-row disabled" title={collapsed ? item.label : undefined}>
+                  {content}
+                </button>
+              );
+            }
+            return (
+              <Link key={item.label} href={item.href} className={`nav-row${active ? ' active' : ''}`} onClick={onNavigate} title={collapsed ? item.label : undefined}>
+                {content}
+              </Link>
+            );
+          })}
         </div>
-        <div>
-          <div className="shell-brand-title">MDB Solar OS</div>
-          <div className="shell-brand-subtitle">Enterprise Hub</div>
-        </div>
+      ))}
+    </nav>
+  );
+}
+
+export default function Sidebar() {
+  const router = useRouter();
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  return (
+    <>
+      <div className="mobile-topbar">
+        <button type="button" className="icon-btn" onClick={() => setMobileOpen(true)}>
+          <Menu size={18} />
+        </button>
+        <div className="mobile-brand"><Sun size={16} /> MDB Solar OS</div>
       </div>
 
-      <nav className="shell-nav">
-        {NAV_GROUPS.map((group) => (
-          <section key={group.title} className="shell-nav-group">
-            <div className="shell-nav-title">{group.title}</div>
-            {group.items.map((item) => {
-              const active = isActiveRoute(activePath, item.href);
-              return (
-                <Link key={item.href} href={item.href} className={`shell-nav-link${active ? ' active' : ''}`}>
-                  <span>{item.label}</span>
-                  {item.soon && <i className="soon-badge">Soon</i>}
-                </Link>
-              );
-            })}
-          </section>
-        ))}
-      </nav>
+      {mobileOpen && (
+        <div className="mobile-overlay" onClick={() => setMobileOpen(false)}>
+          <aside className="mobile-drawer" onClick={(e) => e.stopPropagation()}>
+            <div className="brand-row">
+              <div className="brand-badge"><Sun size={16} /></div>
+              <div>
+                <div className="brand-title">MDB Solar OS</div>
+                <div className="brand-subtitle">AI Operating System</div>
+              </div>
+            </div>
+            <SidebarBody pathname={router.pathname} collapsed={false} onNavigate={() => setMobileOpen(false)} />
+          </aside>
+        </div>
+      )}
+
+      <aside className={`desktop-sidebar${collapsed ? ' collapsed' : ''}`}>
+        <div className="brand-row">
+          <div className="brand-badge"><Sun size={16} /></div>
+          {!collapsed && (
+            <div>
+              <div className="brand-title">MDB Solar OS</div>
+              <div className="brand-subtitle">AI Operating System</div>
+            </div>
+          )}
+        </div>
+
+        <SidebarBody pathname={router.pathname} collapsed={collapsed} />
+
+        <div className="sidebar-footer">
+          <button type="button" className="collapse-btn" onClick={() => setCollapsed((v) => !v)}>
+            {collapsed ? <PanelLeftOpen size={16} /> : <><PanelLeftClose size={16} /> Collapse</>}
+          </button>
+        </div>
+      </aside>
 
       <style jsx>{`
-        .shell-sidebar {
-          height: 100vh;
-          position: sticky;
-          top: 0;
-          overflow-y: auto;
-          background: linear-gradient(180deg, #020617 0%, #0f172a 58%, #111827 100%);
-          border-right: 1px solid rgba(148, 163, 184, 0.24);
-          padding: 20px 14px;
+        .mobile-topbar {
+          display: none;
         }
-        .shell-brand-row {
+        .mobile-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(2, 6, 23, 0.55);
+          z-index: 60;
+        }
+        .mobile-drawer {
+          width: 265px;
+          height: 100vh;
+          background: var(--mdb-sidebar);
+          border-right: 1px solid var(--mdb-sidebar-border);
+          overflow-y: auto;
+        }
+        .desktop-sidebar {
+          display: none;
+        }
+        .brand-row {
           display: flex;
           align-items: center;
-          gap: 12px;
-          margin-bottom: 20px;
-          padding: 8px 6px;
+          gap: 10px;
+          border-bottom: 1px solid var(--mdb-sidebar-border);
+          padding: 14px 14px;
         }
-        .shell-logo {
-          width: 40px;
-          height: 40px;
+        .brand-badge {
+          width: 36px;
+          height: 36px;
+          border-radius: 10px;
+          background: linear-gradient(135deg, var(--mdb-gold), #f59e0b);
           display: grid;
           place-items: center;
-          border-radius: 12px;
-          background: linear-gradient(135deg, #f59e0b, #f97316);
-          box-shadow: 0 8px 18px -8px rgba(249, 115, 22, 0.8);
+          color: var(--mdb-navy);
+          box-shadow: var(--mdb-shadow-elegant);
+          flex-shrink: 0;
         }
-        .shell-brand-title {
-          color: #f8fafc;
-          font-size: 0.98rem;
+        .brand-title {
+          font-size: 0.95rem;
           font-weight: 700;
-          letter-spacing: 0.01em;
+          color: var(--mdb-sidebar-foreground);
         }
-        .shell-brand-subtitle {
-          color: #94a3b8;
-          font-size: 0.75rem;
-        }
-        .shell-nav {
-          display: flex;
-          flex-direction: column;
-          gap: 18px;
-        }
-        .shell-nav-group {
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
-        }
-        .shell-nav-title {
-          color: #64748b;
-          font-size: 0.74rem;
+        .brand-subtitle {
+          font-size: 10px;
           text-transform: uppercase;
-          letter-spacing: 0.08em;
-          font-weight: 700;
-          padding: 0 8px;
-          margin-bottom: 4px;
+          letter-spacing: 0.16em;
+          color: color-mix(in srgb, var(--mdb-sidebar-foreground) 55%, transparent);
         }
-        .shell-nav-link {
-          color: #cbd5e1;
-          text-decoration: none;
+        .sidebar-body {
+          flex: 1;
+          overflow-y: auto;
+          padding: 10px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .group-wrap {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+        .group-title {
+          font-size: 10px;
+          font-weight: 700;
+          color: color-mix(in srgb, var(--mdb-sidebar-foreground) 45%, transparent);
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+          padding: 2px 10px 4px;
+        }
+        .divider {
+          margin: 6px 10px;
+          border-top: 1px solid color-mix(in srgb, var(--mdb-sidebar-border) 80%, transparent);
+        }
+        .nav-row {
           display: flex;
           align-items: center;
-          justify-content: space-between;
-          padding: 10px 12px;
-          border-radius: 11px;
-          font-size: 0.92rem;
-          transition: background-color 0.18s, color 0.18s, transform 0.12s;
+          gap: 10px;
+          border-radius: 10px;
+          padding: 8px 10px;
+          color: color-mix(in srgb, var(--mdb-sidebar-foreground) 74%, transparent);
+          text-decoration: none;
+          border: 1px solid transparent;
+          transition: all 0.18s ease;
+          background: transparent;
+          cursor: pointer;
         }
-        .shell-nav-link:hover {
-          background: rgba(30, 41, 59, 0.95);
-          color: #fff;
-          transform: translateX(2px);
+        .nav-row:hover {
+          background: color-mix(in srgb, var(--mdb-sidebar-accent) 60%, transparent);
+          color: var(--mdb-sidebar-foreground);
+          transform: translateX(1px);
         }
-        .shell-nav-link.active {
-          background: linear-gradient(90deg, rgba(29, 78, 216, 0.35), rgba(37, 99, 235, 0.2));
-          border: 1px solid rgba(96, 165, 250, 0.4);
-          color: #fff;
+        .nav-row.active {
+          background: linear-gradient(90deg, color-mix(in srgb, var(--mdb-sidebar-accent) 90%, transparent), color-mix(in srgb, var(--mdb-sidebar-accent) 45%, transparent));
+          border-color: color-mix(in srgb, var(--mdb-gold) 35%, transparent);
+          box-shadow: inset 2px 0 0 0 var(--mdb-gold);
+          color: var(--mdb-sidebar-foreground);
         }
-        .soon-badge {
-          background: rgba(245, 158, 11, 0.15);
-          color: #fbbf24;
-          border: 1px solid rgba(245, 158, 11, 0.35);
+        .nav-row.disabled {
+          opacity: 0.76;
+          cursor: default;
+        }
+        .nav-icon {
+          color: color-mix(in srgb, var(--mdb-sidebar-foreground) 58%, transparent);
+          flex-shrink: 0;
+        }
+        .nav-icon.active {
+          color: var(--mdb-gold);
+        }
+        .label {
+          font-size: 0.86rem;
+          font-weight: 500;
+          flex: 1;
+          min-width: 0;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .soon {
+          font-size: 9px;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
           border-radius: 999px;
-          padding: 2px 7px;
-          font-size: 0.66rem;
-          font-style: normal;
+          padding: 2px 6px;
+          border: 1px solid color-mix(in srgb, var(--mdb-gold) 35%, transparent);
+          color: var(--mdb-gold);
+          background: color-mix(in srgb, var(--mdb-gold) 13%, transparent);
+        }
+        .sidebar-footer {
+          border-top: 1px solid var(--mdb-sidebar-border);
+          padding: 8px;
+        }
+        .collapse-btn {
+          width: 100%;
+          border: none;
+          background: transparent;
+          color: color-mix(in srgb, var(--mdb-sidebar-foreground) 58%, transparent);
+          border-radius: 8px;
+          padding: 8px;
+          font-size: 11px;
           font-weight: 700;
-          letter-spacing: 0.02em;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          cursor: pointer;
+        }
+        .collapse-btn:hover {
+          background: color-mix(in srgb, var(--mdb-sidebar-accent) 45%, transparent);
+          color: var(--mdb-gold);
+        }
+        .icon-btn {
+          width: 36px;
+          height: 36px;
+          display: grid;
+          place-items: center;
+          border-radius: 8px;
+          border: 1px solid color-mix(in srgb, var(--mdb-sidebar-border) 80%, transparent);
+          background: color-mix(in srgb, var(--mdb-sidebar-accent) 50%, transparent);
+          color: var(--mdb-sidebar-foreground);
+        }
+        .mobile-brand {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          color: var(--mdb-sidebar-foreground);
+          font-size: 0.9rem;
+          font-weight: 700;
+        }
+        @media (max-width: 980px) {
+          .mobile-topbar {
+            display: flex;
+            position: sticky;
+            top: 0;
+            z-index: 35;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--mdb-sidebar);
+            border-bottom: 1px solid var(--mdb-sidebar-border);
+            padding: 8px 10px;
+            margin: -14px -14px 10px -14px;
+          }
+        }
+        @media (min-width: 981px) {
+          .desktop-sidebar {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            position: sticky;
+            top: 0;
+            width: 256px;
+            background: var(--mdb-sidebar);
+            border-right: 1px solid var(--mdb-sidebar-border);
+          }
+          .desktop-sidebar.collapsed {
+            width: 72px;
+          }
+          .desktop-sidebar.collapsed .brand-row {
+            justify-content: center;
+          }
+          .desktop-sidebar.collapsed .nav-row {
+            justify-content: center;
+            padding: 9px 8px;
+          }
+          .desktop-sidebar.collapsed .label,
+          .desktop-sidebar.collapsed .soon {
+            display: none;
+          }
         }
       `}</style>
-    </aside>
+    </>
   );
 }

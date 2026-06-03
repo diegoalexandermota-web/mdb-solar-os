@@ -1,3 +1,28 @@
+/* === MDB Solar Hub visual tokens (source-adapted) === */
+:root {
+  --mdb-background: #f7f9fc;
+  --mdb-foreground: #0f172a;
+  --mdb-card: #ffffff;
+  --mdb-muted: #64748b;
+  --mdb-border: #d9e2ee;
+  --mdb-primary: #1d4ed8;
+  --mdb-secondary: #e8edf6;
+  --mdb-navy: #0f1f4b;
+  --mdb-gold: #f4b000;
+  --mdb-sidebar: #0b1228;
+  --mdb-sidebar-foreground: #e2e8f0;
+  --mdb-sidebar-border: #1d2a4e;
+  --mdb-sidebar-accent: #15254c;
+  --mdb-radius: 12px;
+  --mdb-shadow-card: 0 8px 24px -20px rgba(15, 23, 42, 0.45);
+  --mdb-shadow-elegant: 0 12px 28px -18px rgba(15, 31, 75, 0.55);
+}
+
+body {
+  background: var(--mdb-background);
+  color: var(--mdb-foreground);
+}
+
 /* === MDB Solar OS Enterprise Polish === */
 
 /* Card styles */

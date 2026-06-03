@@ -1,54 +1,83 @@
 import type { ReactNode } from 'react';
 
-type TopbarProps = {
-  title: string;
-  subtitle?: string;
-  actions?: ReactNode;
-};
-
-export default function Topbar({ title, subtitle, actions }: TopbarProps) {
+export function Topbar({ eyebrow, title, subtitle, actions }: { eyebrow?: string; title: string; subtitle?: string; actions?: ReactNode }) {
   return (
-    <header className="shell-topbar">
-      <div>
+    <div className="page-header">
+      <div className="header-copy">
+        {eyebrow && <div className="eyebrow">{eyebrow}</div>}
         <h1>{title}</h1>
         {subtitle && <p>{subtitle}</p>}
       </div>
-      {actions && <div className="shell-topbar-actions">{actions}</div>}
+      {actions && <div className="header-actions">{actions}</div>}
 
       <style jsx>{`
-        .shell-topbar {
+        .page-header {
           display: flex;
-          align-items: flex-start;
+          flex-wrap: wrap;
+          align-items: flex-end;
           justify-content: space-between;
           gap: 14px;
-          margin-bottom: 18px;
+          margin-bottom: 16px;
         }
-        .shell-topbar h1 {
-          margin: 0;
-          color: #0f172a;
-          font-size: 1.55rem;
+        .header-copy {
+          min-width: 0;
+        }
+        .eyebrow {
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.12em;
+          color: var(--mdb-primary);
+        }
+        h1 {
+          margin: 8px 0 0;
+          font-size: 1.78rem;
+          line-height: 1.1;
           letter-spacing: -0.03em;
+          color: var(--mdb-foreground);
         }
-        .shell-topbar p {
-          margin: 6px 0 0;
-          color: #475569;
-          font-size: 0.95rem;
+        p {
+          margin: 8px 0 0;
+          font-size: 0.92rem;
+          color: var(--mdb-muted);
+          max-width: 820px;
         }
-        .shell-topbar-actions {
+        .header-actions {
           display: flex;
-          gap: 8px;
           flex-wrap: wrap;
-        }
-        @media (max-width: 860px) {
-          .shell-topbar {
-            flex-direction: column;
-            align-items: stretch;
-          }
-          .shell-topbar-actions {
-            justify-content: flex-start;
-          }
+          gap: 8px;
         }
       `}</style>
-    </header>
+    </div>
   );
+}
+
+export function StageBadge({ stage }: { stage: string }) {
+  const map: Record<string, string> = {
+    'New Lead': 'stage secondary',
+    Contacted: 'stage primary',
+    'Appointment Set': 'stage primary',
+    'Proposal Sent': 'stage gold',
+    'Credit Approved': 'stage success',
+    'Contract Signed': 'stage success',
+    'Site Survey': 'stage primary',
+    Permit: 'stage warning',
+    'Install Scheduled': 'stage primary',
+    Installed: 'stage success',
+    PTO: 'stage success',
+    'Commission Paid': 'stage gold',
+  };
+  return <span className={map[stage] || 'stage secondary'}>{stage}</span>;
+}
+
+export function ServicePill({ service }: { service: string }) {
+  const map: Record<string, string> = {
+    Solar: 'service gold',
+    Water: 'service sky',
+    Roofing: 'service orange',
+    HVAC: 'service emerald',
+    Battery: 'service violet',
+    'EV Charger': 'service cyan',
+  };
+  return <span className={map[service] || 'service gray'}>{service}</span>;
 }
