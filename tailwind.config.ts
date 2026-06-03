@@ -6,6 +6,7 @@ const config: Config = {
     './components/**/*.{js,ts,jsx,tsx}',
     './utils/**/*.{js,ts,jsx,tsx}',
     './lib/**/*.{js,ts,jsx,tsx}',
+    './styles/**/*.{css}',
     './lovable-reference/MDB Solar Hub/src/**/*.{js,ts,jsx,tsx}',
   ],
   theme: {

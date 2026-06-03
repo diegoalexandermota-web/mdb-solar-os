@@ -32,9 +32,14 @@ type MetricState = {
 type LeadRow = {
   id: string;
   name: string | null;
+  address: string | null;
+  city: string | null;
+  utility_company: string | null;
   service_type: string | null;
   pipeline_stage: string | null;
+  assigned_rep: string | null;
   created_at: string | null;
+  monthly_bill: number | null;
 };
 
 function fmtCurrency(value: number) {
@@ -99,15 +104,34 @@ export default function Dashboard() {
 
     try {
       const today = new Date().toISOString().slice(0, 10);
+      const { data: allLeads, error: leadsErr } = await supabase
+        .from('leads')
+        .select('id,name,address,city,utility_company,service_type,pipeline_stage,assigned_rep,created_at')
+        .order('created_at', { ascending: false });
       const { data: tasks, error: tasksErr } = await supabase.from('tasks').select('*');
       const { data: proposals, error: propErr } = await supabase.from('proposals').select('*');
-      const { data: leads, error: leadsErr } = await supabase
-        .from('leads')
-        .select('id,name,service_type,pipeline_stage,created_at')
-        .order('created_at', { ascending: false })
-        .limit(6);
+      const recentLeadIds = (allLeads || []).slice(0, 6).map((lead) => lead.id);
+      const { data: recentLeadProposals } = recentLeadIds.length
+        ? await supabase
+            .from('proposals')
+            .select('lead_id, monthly_bill, created_at')
+            .in('lead_id', recentLeadIds)
+            .order('created_at', { ascending: false })
+        : { data: [] as { lead_id: string; monthly_bill: number | null; created_at: string | null }[] };
+      const assignedRepIds = Array.from(new Set((allLeads || []).map((lead) => lead.assigned_rep).filter((value): value is string => Boolean(value))));
+      const { data: reps } = assignedRepIds.length
+        ? await supabase.from('profiles').select('id,full_name').in('id', assignedRepIds)
+        : { data: [] as { id: string; full_name: string | null }[] };
 
-      if (tasksErr || propErr || leadsErr) throw new Error(tasksErr?.message || propErr?.message || leadsErr?.message);
+      if (leadsErr || tasksErr || propErr) throw new Error(leadsErr?.message || tasksErr?.message || propErr?.message);
+
+      const repNameById = new Map((reps || []).map((rep) => [rep.id, rep.full_name || 'MDB Rep']));
+      const monthlyBillByLeadId = new Map<string, number>();
+      for (const proposal of recentLeadProposals || []) {
+        if (!monthlyBillByLeadId.has(proposal.lead_id)) {
+          monthlyBillByLeadId.set(proposal.lead_id, Number(proposal.monthly_bill) || 0);
+        }
+      }
 
       let todayCount = 0;
       let overdueCount = 0;
@@ -117,6 +141,10 @@ export default function Dashboard() {
       let proposalsSigned = 0;
       let avgValue = 0;
       const financingMix: Record<string, number> = {};
+
+      if (allLeads) {
+        todayCount = allLeads.filter((lead) => lead.pipeline_stage !== 'New Lead' && lead.pipeline_stage !== 'Contacted').length;
+      }
 
       if (tasks) {
         todayCount = tasks.filter((t: any) => !t.completed && t.due_date === today).length;
@@ -152,7 +180,20 @@ export default function Dashboard() {
         avgValue,
         financingMix,
       });
-      setRecentLeads((leads || []) as LeadRow[]);
+      setRecentLeads(
+        (allLeads || []).slice(0, 6).map((lead) => ({
+          id: lead.id,
+          name: lead.name,
+          address: lead.address,
+          city: lead.city,
+          utility_company: lead.utility_company,
+          service_type: lead.service_type,
+          pipeline_stage: lead.pipeline_stage,
+          assigned_rep: repNameById.get(lead.assigned_rep || '') || 'MDB Rep',
+          created_at: lead.created_at,
+          monthly_bill: monthlyBillByLeadId.get(lead.id) || null,
+        })),
+      );
     } catch (e: any) {
       setError(e.message || 'Unable to load dashboard metrics');
     }
@@ -164,8 +205,8 @@ export default function Dashboard() {
   const monthlyRev = metrics.proposalsSigned * 28400;
   const pendingComm = Math.max(metrics.proposalsSigned - installed, 0) * 1980;
   const funnelRows = [
-    { label: 'New Lead → Contacted', n: Math.max(metrics.proposalsCreated, 0), w: 100 },
-    { label: 'Contacted → Appointment Set', n: Math.max(metrics.proposalsSent, 0), w: 78 },
+    { label: 'New Lead → Contacted', n: Math.max(metrics.today, 0), w: 100 },
+    { label: 'Contacted → Appointment Set', n: Math.max(metrics.followups, 0), w: 78 },
     { label: 'Appointment → Proposal Sent', n: Math.max(metrics.proposalsSent, 0), w: 60 },
     { label: 'Proposal → Credit Approved', n: Math.max(metrics.proposalsSigned, 0), w: 42 },
     { label: 'Credit → Contract Signed', n: Math.max(Math.round(metrics.proposalsSigned * 0.75), 0), w: 32 },
@@ -188,8 +229,8 @@ export default function Dashboard() {
     <div className="p-4 lg:p-6 space-y-5">
       <PageHeader
         eyebrow="Operations · This month"
-        title="Good morning, Diego"
-        subtitle="Here's how MDB Solar is performing today. Pipeline is healthy — focus follow-ups on Credit Approved and Proposal Sent."
+        title="Good morning, Diego ☀️"
+        subtitle="Here's how MDB Solar is performing today. Pipeline is healthy — focus your follow-ups on Credit Approved and Proposal Sent."
         actions={
           <Link
             href="/pipeline"
@@ -285,11 +326,11 @@ export default function Dashboard() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium text-foreground truncate">{l.name || 'Unnamed Lead'}</div>
-                <div className="text-xs text-muted-foreground truncate">Created {l.created_at ? new Date(l.created_at).toLocaleDateString() : '-'}</div>
+                <div className="text-xs text-muted-foreground truncate">{l.address || '-'} · {l.utility_company || '-'} · {fmtCurrency(l.monthly_bill || 0)}/mo</div>
               </div>
               <ServicePill service={l.service_type || 'Solar'} />
               <StageBadge stage={l.pipeline_stage || 'New Lead'} />
-              <div className="text-xs text-muted-foreground hidden md:block w-24 truncate text-right">MDB Rep</div>
+              <div className="text-xs text-muted-foreground hidden md:block w-24 truncate text-right">{l.assigned_rep || 'MDB Rep'}</div>
             </Link>
           ))}
         </div>

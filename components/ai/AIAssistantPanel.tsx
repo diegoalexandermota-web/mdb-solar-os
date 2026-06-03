@@ -58,7 +58,7 @@ export default function AIAssistantPanel() {
   const [msgs, setMsgs] = useState<Msg[]>([
     {
       role: 'ai',
-      text: "Hey Diego. I'm MDB AI. I monitor your pipeline, draft outreach, surface next-best actions, and flag risk. Pick a shortcut or ask anything.",
+      text: "Hey Diego 👋 I'm MDB AI. I read every lead in your pipeline and surface the next best action, draft outreach, handle objections, recommend bundles, and flag risk. Pick a shortcut or ask me anything.",
     },
   ]);
 
@@ -82,6 +82,7 @@ export default function AIAssistantPanel() {
 
   return (
     <aside className="hidden xl:flex w-[360px] shrink-0 flex-col border-l border-border bg-card">
+      {/* Source mapping: assistant header bar. */}
       <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-gradient-to-br from-navy via-primary to-primary-glow text-primary-foreground">
         <div className="flex items-center gap-2">
           <div className="size-8 rounded-lg bg-gold grid place-items-center shadow-elegant">
@@ -90,7 +91,7 @@ export default function AIAssistantPanel() {
           <div className="leading-tight">
             <div className="text-sm font-semibold">MDB AI Assistant</div>
             <div className="text-[10px] uppercase tracking-wider opacity-70 flex items-center gap-1">
-              <span className="size-1.5 rounded-full bg-success animate-pulse" /> Live · monitoring leads
+              <span className="size-1.5 rounded-full bg-success animate-pulse" /> Live · monitoring 28 leads
             </div>
           </div>
         </div>
@@ -99,6 +100,7 @@ export default function AIAssistantPanel() {
         </button>
       </div>
 
+      {/* Source mapping: copilot/chat tabs. */}
       <div className="px-3 pt-2 border-b border-border flex gap-1 bg-card">
         {(['copilot', 'chat'] as const).map((t) => (
           <button

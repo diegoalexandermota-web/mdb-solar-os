@@ -37,6 +37,7 @@ import {
   Menu,
 } from 'lucide-react';
 import { cn } from '../../lib/cn';
+import { Sheet, SheetContent, SheetTrigger } from '../ui/sheet';
 
 type Item = { to: string; label: string; icon: any; soon?: boolean };
 type Group = { label: string; items: Item[] };
@@ -141,7 +142,7 @@ function NavRow({
           <span className="truncate">{item.label}</span>
           {item.soon && (
             <span className="ml-auto text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-sidebar-accent text-sidebar-foreground/60">
-              Soon
+              soon
             </span>
           )}
         </>
@@ -223,9 +224,19 @@ export default function Sidebar() {
   return (
     <>
       <div className="md:hidden fixed top-0 inset-x-0 z-40 h-12 bg-sidebar text-sidebar-foreground border-b border-sidebar-border flex items-center justify-between px-3">
-        <button onClick={() => setMobileOpen(true)} className="size-9 grid place-items-center rounded-md hover:bg-sidebar-accent" type="button">
-          <Menu className="size-5" />
-        </button>
+        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+          <SheetTrigger asChild>
+            <button className="size-9 grid place-items-center rounded-md hover:bg-sidebar-accent" type="button">
+              <Menu className="size-5" />
+            </button>
+          </SheetTrigger>
+          <SheetContent side="left" className="p-0 w-64 bg-sidebar text-sidebar-foreground border-sidebar-border">
+            <div className="flex flex-col h-full">
+              <Brand collapsed={false} />
+              <SidebarBody pathname={pathname} collapsed={false} onNavigate={() => setMobileOpen(false)} />
+            </div>
+          </SheetContent>
+        </Sheet>
         <div className="flex items-center gap-2">
           <div className="size-7 rounded-md bg-gold grid place-items-center">
             <Sun className="size-4 text-gold-foreground" strokeWidth={2.5} />
@@ -235,15 +246,6 @@ export default function Sidebar() {
         <div className="size-9" />
       </div>
       <div className="md:hidden h-12 shrink-0" aria-hidden />
-
-      {mobileOpen && (
-        <div className="md:hidden fixed inset-0 z-50 bg-black/50" onClick={() => setMobileOpen(false)}>
-          <div className="h-full w-64 bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <Brand collapsed={false} />
-            <SidebarBody pathname={pathname} collapsed={false} onNavigate={() => setMobileOpen(false)} />
-          </div>
-        </div>
-      )}
 
       <aside
         className={cn(
