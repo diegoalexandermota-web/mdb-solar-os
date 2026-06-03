@@ -22,6 +22,15 @@ export default function Login() {
   useEffect(() => {
     let isMounted = true;
 
+    // Recovery links can arrive directly on /login with hash tokens.
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash || '';
+      if (hash.includes('type=recovery') || hash.includes('access_token')) {
+        window.location.href = `/reset-password${hash}`;
+        return;
+      }
+    }
+
     const redirectIfSessionExists = async () => {
       const { data } = await supabase.auth.getSession();
       if (!isMounted) return;
