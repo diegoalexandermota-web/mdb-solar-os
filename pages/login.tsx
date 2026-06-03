@@ -1,13 +1,42 @@
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
 import { supabase } from '../utils/supabaseClient';
 
 export default function Login() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [sent, setSent] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const redirectIfSessionExists = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!isMounted) return;
+      if (data.session) {
+        router.replace('/dashboard');
+      }
+    };
+
+    redirectIfSessionExists();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        router.replace('/dashboard');
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, [router]);
 
   function validate() {
     if (!email.trim()) return 'Email is required';
@@ -27,7 +56,12 @@ export default function Login() {
       return;
     }
     setSaving(true);
-    const { error: supaError } = await supabase.auth.signInWithOtp({ email });
+    const { error: supaError } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: `${window.location.origin}/dashboard`,
+      },
+    });
     if (supaError) {
       setError(supaError.message);
       setToast('Unable to send magic link');
