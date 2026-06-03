@@ -3,11 +3,19 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../utils/supabaseClient';
 
+type AuthMode = 'password' | 'magic' | 'signup';
+
+function validateEmail(email: string) {
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim());
+}
+
 export default function Login() {
   const router = useRouter();
+  const [mode, setMode] = useState<AuthMode>('password');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [sent, setSent] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -49,21 +57,81 @@ export default function Login() {
     }
   }, [router.isReady, router.query.error]);
 
-  function validate() {
-    if (!email.trim()) return 'Email is required';
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return 'Valid email required';
-    return '';
+  function resetForm() {
+    setError('');
+    setSuccessMsg('');
+    setPassword('');
   }
 
-  async function handleLogin(e: React.FormEvent) {
+  function switchMode(next: AuthMode) {
+    resetForm();
+    setMode(next);
+  }
+
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2800);
+  }
+
+  async function handlePasswordSignIn(e: React.FormEvent) {
     e.preventDefault();
     if (saving) return;
     setError('');
-    const err = validate();
-    if (err) {
-      setError(err);
-      setToast('Please complete required fields');
-      setTimeout(() => setToast(null), 2500);
+    if (!email.trim() || !validateEmail(email)) {
+      setError('Valid email is required');
+      return;
+    }
+    if (!password) {
+      setError('Password is required');
+      return;
+    }
+    setSaving(true);
+    const { error: supaError } = await supabase.auth.signInWithPassword({ email, password });
+    if (supaError) {
+      setError(supaError.message);
+      showToast('Sign in failed');
+    }
+    // On success, onAuthStateChange fires and redirects to /dashboard.
+    setSaving(false);
+  }
+
+  async function handleSignUp(e: React.FormEvent) {
+    e.preventDefault();
+    if (saving) return;
+    setError('');
+    if (!email.trim() || !validateEmail(email)) {
+      setError('Valid email is required');
+      return;
+    }
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+    setSaving(true);
+    const { error: supaError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+    if (supaError) {
+      setError(supaError.message);
+      showToast('Account creation failed');
+    } else {
+      setSuccessMsg('Account created! Check your email to confirm, then sign in.');
+      showToast('Account created — check your email');
+      setPassword('');
+    }
+    setSaving(false);
+  }
+
+  async function handleMagicLink(e: React.FormEvent) {
+    e.preventDefault();
+    if (saving) return;
+    setError('');
+    if (!email.trim() || !validateEmail(email)) {
+      setError('Valid email is required');
       return;
     }
     setSaving(true);
@@ -75,19 +143,25 @@ export default function Login() {
     });
     if (supaError) {
       setError(supaError.message);
-      setToast('Unable to send magic link');
+      showToast('Unable to send magic link');
     } else {
-      setSent(true);
-      setToast('Magic link sent!');
+      setSuccessMsg('Magic link sent! Check your inbox.');
+      showToast('Magic link sent!');
     }
     setSaving(false);
-    setTimeout(() => setToast(null), 2500);
   }
+
+  const headingMap: Record<AuthMode, string> = {
+    password: 'Sign in to your account',
+    magic: 'Sign in with Magic Link',
+    signup: 'Create your account',
+  };
 
   return (
     <div className="login-bg">
       <div className="login-container">
         <div className="login-card">
+          {/* Logo */}
           <div className="login-logo-row">
             <div className="login-logo-circle">
               <svg width="38" height="38" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -97,15 +171,72 @@ export default function Login() {
             </div>
             <span className="login-title">MDB Solar OS</span>
           </div>
-          <h2 className="login-heading">Sign in to your account</h2>
+
+          <h2 className="login-heading">{headingMap[mode]}</h2>
+
           {toast && <div className="login-toast">{toast}</div>}
-          {sent ? (
-            <div className="login-success">Check your email for the login link.</div>
-          ) : (
-            <form className="login-form" onSubmit={handleLogin} autoComplete="off">
+          {successMsg && <div className="login-success">{successMsg}</div>}
+
+          {/* Mode tabs */}
+          <div className="login-tabs">
+            <button
+              type="button"
+              className={`login-tab${mode === 'password' ? ' active' : ''}`}
+              onClick={() => switchMode('password')}
+            >
+              Email &amp; Password
+            </button>
+            <button
+              type="button"
+              className={`login-tab${mode === 'magic' ? ' active' : ''}`}
+              onClick={() => switchMode('magic')}
+            >
+              Magic Link
+            </button>
+          </div>
+
+          {/* Email & Password sign-in */}
+          {mode === 'password' && (
+            <form className="login-form" onSubmit={handlePasswordSignIn} autoComplete="on">
               <label htmlFor="email" className="login-label">Email address</label>
               <input
                 id="email"
+                type="email"
+                className="login-input"
+                placeholder="you@email.com"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                disabled={saving}
+                autoFocus
+                autoComplete="email"
+              />
+              <label htmlFor="password" className="login-label">Password</label>
+              <input
+                id="password"
+                type="password"
+                className="login-input"
+                placeholder="Your password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                disabled={saving}
+                autoComplete="current-password"
+              />
+              {error && <div className="login-error">{error}</div>}
+              <button type="submit" className="login-btn" disabled={saving}>
+                {saving ? 'Signing in...' : 'Sign In'}
+              </button>
+              <button type="button" className="login-link-btn" onClick={() => switchMode('signup')}>
+                Don&apos;t have an account? Create one
+              </button>
+            </form>
+          )}
+
+          {/* Magic Link */}
+          {mode === 'magic' && (
+            <form className="login-form" onSubmit={handleMagicLink} autoComplete="off">
+              <label htmlFor="email-magic" className="login-label">Email address</label>
+              <input
+                id="email-magic"
                 type="email"
                 className="login-input"
                 placeholder="you@email.com"
@@ -117,6 +248,45 @@ export default function Login() {
               {error && <div className="login-error">{error}</div>}
               <button type="submit" className="login-btn" disabled={saving}>
                 {saving ? 'Sending...' : 'Send Magic Link'}
+              </button>
+              <button type="button" className="login-link-btn" onClick={() => switchMode('signup')}>
+                Don&apos;t have an account? Create one
+              </button>
+            </form>
+          )}
+
+          {/* Sign up */}
+          {mode === 'signup' && (
+            <form className="login-form" onSubmit={handleSignUp} autoComplete="on">
+              <label htmlFor="email-signup" className="login-label">Email address</label>
+              <input
+                id="email-signup"
+                type="email"
+                className="login-input"
+                placeholder="you@email.com"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                disabled={saving}
+                autoFocus
+                autoComplete="email"
+              />
+              <label htmlFor="password-signup" className="login-label">Password <span className="login-hint">(min. 8 characters)</span></label>
+              <input
+                id="password-signup"
+                type="password"
+                className="login-input"
+                placeholder="Create a strong password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                disabled={saving}
+                autoComplete="new-password"
+              />
+              {error && <div className="login-error">{error}</div>}
+              <button type="submit" className="login-btn" disabled={saving}>
+                {saving ? 'Creating account...' : 'Create Account'}
+              </button>
+              <button type="button" className="login-link-btn" onClick={() => switchMode('password')}>
+                Already have an account? Sign in
               </button>
             </form>
           )}
@@ -144,7 +314,7 @@ export default function Login() {
           border-radius: 18px;
           box-shadow: 0 4px 32px rgba(43,57,144,0.13);
           padding: 2.5rem 2.2rem 2.2rem 2.2rem;
-          max-width: 370px;
+          max-width: 390px;
           width: 100%;
           display: flex;
           flex-direction: column;
@@ -175,8 +345,35 @@ export default function Login() {
           font-size: 1.15rem;
           font-weight: 600;
           color: #1a1d2e;
-          margin-bottom: 1.5rem;
+          margin-bottom: 1rem;
           text-align: center;
+        }
+        .login-tabs {
+          display: flex;
+          width: 100%;
+          gap: 0;
+          margin-bottom: 1.3rem;
+          border-radius: 8px;
+          overflow: hidden;
+          border: 1.5px solid #dbe2f3;
+        }
+        .login-tab {
+          flex: 1;
+          background: #f4f6fa;
+          border: none;
+          padding: 0.6em 0;
+          font-size: 0.98rem;
+          font-weight: 600;
+          color: #2b3990;
+          cursor: pointer;
+          transition: background 0.18s, color 0.18s;
+        }
+        .login-tab.active {
+          background: #2b3990;
+          color: #fff;
+        }
+        .login-tab:not(:last-child) {
+          border-right: 1.5px solid #dbe2f3;
         }
         .login-form {
           width: 100%;
@@ -189,6 +386,11 @@ export default function Login() {
           font-weight: 500;
           color: #2b3990;
         }
+        .login-hint {
+          font-size: 0.88em;
+          font-weight: 400;
+          color: #7a88b8;
+        }
         .login-input {
           border: 1.5px solid #dbe2f3;
           border-radius: 7px;
@@ -197,6 +399,8 @@ export default function Login() {
           font-size: 1rem;
           outline: none;
           transition: border-color 0.18s;
+          width: 100%;
+          box-sizing: border-box;
         }
         .login-input:focus {
           border-color: #2b3990;
@@ -216,9 +420,11 @@ export default function Login() {
           font-size: 1.08rem;
           padding: 0.8em 0;
           margin-top: 0.2em;
+          cursor: pointer;
           box-shadow: 0 1px 4px rgba(43,57,144,0.04);
           transition: background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s;
           min-width: 120px;
+          width: 100%;
         }
         .login-btn:active {
           background: #1a1d2e;
@@ -228,6 +434,20 @@ export default function Login() {
         .login-btn:disabled {
           opacity: 0.6;
           cursor: not-allowed;
+        }
+        .login-link-btn {
+          background: none;
+          border: none;
+          color: #2b3990;
+          font-size: 0.97rem;
+          cursor: pointer;
+          padding: 0.3em 0;
+          text-decoration: underline;
+          text-underline-offset: 2px;
+          text-align: center;
+        }
+        .login-link-btn:hover {
+          color: #fbb040;
         }
         .login-toast {
           margin-bottom: 1.1em;
@@ -239,15 +459,20 @@ export default function Login() {
           box-shadow: 0 2px 8px rgba(43,57,144,0.10);
           text-align: center;
           animation: fadein 0.3s;
+          width: 100%;
+          box-sizing: border-box;
         }
         .login-success {
-          color: #2b3990;
-          background: #e9edf7;
+          color: #1a6632;
+          background: #e6f4ec;
+          border: 1.5px solid #7bc99b;
           border-radius: 7px;
-          padding: 1.2em 1em;
+          padding: 0.8em 1em;
           text-align: center;
-          font-size: 1.08rem;
-          margin-bottom: 1em;
+          font-size: 1rem;
+          margin-bottom: 0.8em;
+          width: 100%;
+          box-sizing: border-box;
         }
         .login-footer {
           margin-top: 2.5rem;
