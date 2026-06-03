@@ -16,6 +16,14 @@ function getSystemSizeKw(panelCount: number, wattage: number) {
   return ((panelCount * wattage) / 1000).toFixed(2);
 }
 
+function buildAiSummaryText(summary: any) {
+  return (
+    `${summary.executive_summary || ''}\n` +
+    `${summary.homeowner_benefit || ''}\n` +
+    `${summary.financing_summary || ''}`
+  ).trim();
+}
+
 export default function SolarDesignStudio() {
   const [pdfLoading, setPdfLoading] = useState(false);
   // --- All React hooks and state at the top ---
@@ -141,6 +149,11 @@ export default function SolarDesignStudio() {
     setAiLoading(true);
     setAiSummary(null);
     const input = {
+      lead_id: leadId || null,
+      proposal_id: proposalId || null,
+      customer_name: '',
+      service_address: '',
+      utility_company: '',
       panel_count: panels.length,
       system_size_kw: Number(getSystemSizeKw(panels.length, panelWattage)),
       estimated_production: "(placeholder)",
@@ -148,9 +161,32 @@ export default function SolarDesignStudio() {
       panel_model: panelModel,
       inverter_model: inverter,
       battery_model: battery,
+      financing_type: '',
+      monthly_payment: '',
+      proposal_value: '',
+      notes: '',
     };
-    const summary = generateSolarProposalSummary(input);
-    setAiSummary(summary.executive_summary + "\n" + summary.homeowner_benefit + "\n" + summary.financing_summary);
+
+    try {
+      const response = await fetch('/api/ai/solar-proposal-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      });
+
+      if (!response.ok) {
+        throw new Error(`AI API error: ${response.status}`);
+      }
+
+      const apiSummary = await response.json();
+      setAiSummary(buildAiSummaryText(apiSummary));
+    } catch {
+      const summary = generateSolarProposalSummary(input);
+      setAiSummary(buildAiSummaryText(summary));
+      setToast('OpenAI unavailable. Local AI summary generated.');
+      setTimeout(() => setToast(null), 2500);
+    }
+
     setAiLoading(false);
   }
 

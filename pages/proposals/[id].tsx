@@ -24,6 +24,26 @@ function getProviderTypes(provider) {
   return found ? found.types : [];
 }
 
+function buildAiSummaryText(summary: any) {
+  const talkingPoints = Array.isArray(summary.ai_sales_talking_points)
+    ? summary.ai_sales_talking_points.join('\n- ')
+    : '';
+  const objections = Array.isArray(summary.objection_handling)
+    ? summary.objection_handling.join('\n- ')
+    : '';
+
+  return (
+    `${summary.executive_summary || ''}\n` +
+    `${summary.homeowner_benefit || ''}\n` +
+    `${summary.financing_summary || ''}\n\n` +
+    `Sales Talking Points:\n- ${talkingPoints}\n` +
+    `Objection Handling:\n- ${objections}\n` +
+    `Next Step: ${summary.next_step || ''}\n` +
+    `WhatsApp Message: ${summary.whatsapp_message || ''}\n` +
+    `Email Follow-up: ${summary.email_followup || ''}`
+  ).trim();
+}
+
 
 
 export default function ProposalBuilder() {
@@ -37,6 +57,7 @@ export default function ProposalBuilder() {
   const [aiSummary, setAiSummary] = useState('');
   const [linkedDesign, setLinkedDesign] = useState<any>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
   function handleGeneratePDF() {
     setPdfLoading(true);
     try {
@@ -146,10 +167,16 @@ export default function ProposalBuilder() {
   }
 
 
-  function handleAISummary(generateNew = false) {
+  async function handleAISummary(generateNew = false) {
     // Use linkedDesign if available, else proposal fields
     const src = linkedDesign || proposal || {};
+    const recommendedScenario = scenarios.find((s: any) => s?.is_recommended) || scenarios[0] || {};
     const input = {
+      lead_id: lead?.id || null,
+      proposal_id: proposal?.id || (Array.isArray(id) ? id[0] : id) || null,
+      customer_name: lead?.name || proposal?.customer_name || '',
+      service_address: lead?.address || proposal?.address || '',
+      utility_company: lead?.utility_company || proposal?.utility_company || '',
       panel_count: Number(src.panel_count) || 0,
       system_size_kw: Number(src.system_size_kw) || 0,
       estimated_production: src.estimated_production || src.annual_production || '',
@@ -157,16 +184,57 @@ export default function ProposalBuilder() {
       panel_model: src.panel_model || src.panelModel || '',
       inverter_model: src.inverter_model || src.inverterModel || '',
       battery_model: src.battery_model || src.batteryModel || '',
+      financing_type: recommendedScenario.program_type || proposal?.financing_type || '',
+      monthly_payment: recommendedScenario.monthly_payment || proposal?.monthly_payment || '',
+      proposal_value: proposal?.proposal_value || proposal?.total_value || '',
+      notes: lead?.notes || proposal?.notes || '',
     };
-    const summary = generateSolarProposalSummary(input);
-    setAiSummary(
-      summary.executive_summary + '\n' +
-      summary.homeowner_benefit + '\n' +
-      summary.financing_summary + '\n' +
-      '\nSales Talking Points:\n- ' + summary.ai_sales_talking_points.join('\n- ') +
-      '\nObjection Handling:\n- ' + summary.objection_handling.join('\n- ') +
-      '\nNext Step: ' + summary.next_step
-    );
+
+    setAiLoading(true);
+    try {
+      const response = await fetch('/api/ai/solar-proposal-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      });
+
+      if (!response.ok) {
+        throw new Error(`AI API error: ${response.status}`);
+      }
+
+      const apiSummary = await response.json();
+      setAiSummary(buildAiSummaryText(apiSummary));
+    } catch {
+      const summary = generateSolarProposalSummary(input);
+      setAiSummary(buildAiSummaryText(summary));
+      setToast('OpenAI unavailable. Local AI summary generated.');
+      setTimeout(() => setToast(null), 2500);
+    }
+    setAiLoading(false);
+  }
+
+  async function handleSaveAISummary() {
+    if (!aiSummary) {
+      setToast('Generate AI summary first.');
+      setTimeout(() => setToast(null), 2000);
+      return;
+    }
+
+    const proposalId = proposal?.id || (Array.isArray(id) ? id[0] : id);
+    if (!proposalId) {
+      setToast('Proposal ID is missing.');
+      setTimeout(() => setToast(null), 2000);
+      return;
+    }
+
+    const { error } = await supabase.from('proposals').update({ ai_summary: aiSummary }).eq('id', proposalId);
+    if (error) {
+      setToast('Error saving AI summary.');
+    } else {
+      setToast('AI summary saved.');
+      setProposal((prev: any) => ({ ...prev, ai_summary: aiSummary }));
+    }
+    setTimeout(() => setToast(null), 2500);
   }
 
   function handleCopySummary() {
@@ -331,13 +399,15 @@ export default function ProposalBuilder() {
       <div className="proposal-ai-panel card">
         <div className="proposal-ai-title-row">
           <span className="proposal-ai-title">MDB AI Proposal Summary</span>
-          <button className="proposal-action-btn" onClick={() => handleAISummary(true)}>Generate AI Summary</button>
-          <button className="proposal-action-btn" onClick={() => handleAISummary(true)}>Regenerate</button>
+          <button className="proposal-action-btn" onClick={() => handleAISummary(true)} disabled={aiLoading}>Generate AI Summary</button>
+          <button className="proposal-action-btn" onClick={() => handleAISummary(true)} disabled={aiLoading}>Regenerate</button>
           <button className="proposal-action-btn" onClick={handleCopySummary} disabled={!aiSummary}>Copy Summary</button>
+          <button className="proposal-action-btn" onClick={handleSaveAISummary} disabled={!aiSummary || aiLoading}>Save AI Summary</button>
           <button className="proposal-action-btn" onClick={handleGeneratePDF} disabled={pdfLoading || !aiSummary} style={{marginLeft:8}}>
             {pdfLoading ? 'Generating PDF...' : 'Generate Proposal PDF'}
           </button>
         </div>
+        {aiLoading && <div style={{ marginTop: 8 }}>Generating AI summary...</div>}
         <div className="proposal-ai-summary" style={{whiteSpace:'pre-line'}}>{aiSummary}</div>
       </div>
 
