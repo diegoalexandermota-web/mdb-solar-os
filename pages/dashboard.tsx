@@ -1,25 +1,48 @@
-
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../utils/supabaseClient';
-import SkeletonLoader from '../components/SkeletonLoader';
-import SkeletonCard from '../components/SkeletonCard';
-import SkeletonTable from '../components/SkeletonTable';
 import SkeletonMetric from '../components/SkeletonMetric';
+import SkeletonTable from '../components/SkeletonTable';
+
+type MetricState = {
+  today: number;
+  overdue: number;
+  followups: number;
+  proposalsCreated: number;
+  proposalsSent: number;
+  proposalsSigned: number;
+  proposalConversion: number;
+  avgValue: number;
+  financingMix: Record<string, number | string>;
+};
+
+type LeadRow = {
+  id: string;
+  name: string | null;
+  service_type: string | null;
+  pipeline_stage: string | null;
+  created_at: string | null;
+};
+
+function KpiCard({ label, value, tone }: { label: string; value: string | number; tone?: 'accent' | 'warning' | 'neutral' }) {
+  return (
+    <article className={`kpi-card${tone ? ` ${tone}` : ''}`}>
+      <div className="kpi-label">{label}</div>
+      <div className="kpi-value">{value}</div>
+    </article>
+  );
+}
+
+function formatDate(value: string | null) {
+  if (!value) return '-';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '-';
+  return d.toLocaleDateString();
+}
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [metrics, setMetrics] = useState<{
-    today: number;
-    overdue: number;
-    followups: number;
-    proposalsCreated: number;
-    proposalsSent: number;
-    proposalsSigned: number;
-    proposalConversion: number;
-    avgValue: number;
-    financingMix: Record<string, number | string>;
-  }>({
+  const [metrics, setMetrics] = useState<MetricState>({
     today: 0,
     overdue: 0,
     followups: 0,
@@ -28,9 +51,18 @@ export default function Dashboard() {
     proposalsSigned: 0,
     proposalConversion: 0,
     avgValue: 0,
-    financingMix: {}
+    financingMix: {},
   });
+  const [recentLeads, setRecentLeads] = useState<LeadRow[]>([]);
 
+  const funnelData = useMemo(
+    () => [
+      { label: 'Created', value: metrics.proposalsCreated },
+      { label: 'Sent', value: metrics.proposalsSent },
+      { label: 'Signed', value: metrics.proposalsSigned },
+    ],
+    [metrics.proposalsCreated, metrics.proposalsSent, metrics.proposalsSigned]
+  );
 
   useEffect(() => {
     fetchMetrics();
@@ -45,14 +77,33 @@ export default function Dashboard() {
       const todayStr = today.toISOString().slice(0, 10);
       const { data: tasks, error: tasksErr } = await supabase.from('tasks').select('*');
       const { data: proposals, error: propErr } = await supabase.from('proposals').select('*');
-      if (tasksErr || propErr) throw new Error(tasksErr?.message || propErr?.message);
-      let todayCount = 0, overdueCount = 0, followups = 0;
-      let proposalsCreated = 0, proposalsSent = 0, proposalsSigned = 0, avgValue = 0, financingMix: Record<string, number> = {};
+      const { data: leads, error: leadsErr } = await supabase
+        .from('leads')
+        .select('id,name,service_type,pipeline_stage,created_at')
+        .order('created_at', { ascending: false })
+        .limit(6);
+
+      if (tasksErr || propErr || leadsErr) {
+        throw new Error(tasksErr?.message || propErr?.message || leadsErr?.message);
+      }
+
+      let todayCount = 0;
+      let overdueCount = 0;
+      let followups = 0;
+      let proposalsCreated = 0;
+      let proposalsSent = 0;
+      let proposalsSigned = 0;
+      let avgValue = 0;
+      const financingMix: Record<string, number> = {};
+
+      // Existing dashboard logic preserved.
       if (tasks) {
         todayCount = tasks.filter((t: any) => !t.completed && t.due_date === todayStr).length;
         overdueCount = tasks.filter((t: any) => !t.completed && t.due_date < todayStr).length;
         followups = tasks.filter((t: any) => !t.completed && t.type === 'Call').length;
       }
+
+      // Existing dashboard logic preserved.
       if (proposals) {
         const active = proposals.filter((p: any) => !p.archived);
         proposalsCreated = active.length;
@@ -60,18 +111,20 @@ export default function Dashboard() {
         proposalsSigned = active.filter((p: any) => p.status === 'Signed').length;
         avgValue = active.length
           ? Math.round(
-              active.reduce((sum: number, p: any) => sum + (Number(p.monthly_bill) || 0), 0) /
-                active.length
+              active.reduce((sum: number, p: any) => sum + (Number(p.monthly_bill) || 0), 0) / active.length
             )
           : 0;
+
         for (const p of active) {
           const pref = p.financing_preference || 'Unknown';
           financingMix[pref] = (financingMix[pref] || 0) + 1;
         }
       }
+
       const proposalConversion = proposalsCreated
         ? Math.round((proposalsSigned / proposalsCreated) * 100)
         : 0;
+
       setMetrics({
         today: todayCount,
         overdue: overdueCount,
@@ -81,8 +134,10 @@ export default function Dashboard() {
         proposalsSigned,
         proposalConversion,
         avgValue,
-        financingMix
+        financingMix,
       });
+
+      setRecentLeads((leads || []) as LeadRow[]);
     } catch (e: any) {
       setError(e.message || 'Unable to load dashboard metrics');
     }
@@ -90,393 +145,447 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="dashboard-root">
-      <aside className="dashboard-sidebar">
-        <div className="dashboard-logo-row">
-          <div className="dashboard-logo-circle">
+    <div className="hub-shell">
+      <aside className="hub-sidebar">
+        <div className="hub-brand">
+          <div className="hub-logo">
             <svg width="34" height="34" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="19" cy="19" r="19" fill="#2b3990"/>
-              <path d="M19 8L24.5 28H13.5L19 8Z" fill="#fbb040"/>
+              <circle cx="19" cy="19" r="19" fill="#111827" />
+              <path d="M19 8L24.5 28H13.5L19 8Z" fill="#f59e0b" />
             </svg>
           </div>
-          <span className="dashboard-title">MDB Solar OS</span>
+          <div>
+            <div className="brand-title">MDB Solar Hub</div>
+            <div className="brand-subtitle">Enterprise CRM</div>
+          </div>
         </div>
-        <nav className="dashboard-nav">
-          <a className="dashboard-nav-link active">Dashboard</a>
-          <a className="dashboard-nav-link" href="/pipeline">Pipeline</a>
-          <a className="dashboard-nav-link" href="/projects">Projects</a>
-          <a className="dashboard-nav-link" href="/proposals">Proposals</a>
-          <a className="dashboard-nav-link" href="/tasks">Tasks</a>
+
+        <nav className="hub-nav">
+          <a className="hub-nav-link active" href="/dashboard">Dashboard</a>
+          <a className="hub-nav-link" href="/pipeline">Pipeline</a>
+          <a className="hub-nav-link" href="/projects">Projects</a>
+          <a className="hub-nav-link" href="/proposals">Proposals</a>
+          <a className="hub-nav-link" href="/tasks">Tasks</a>
+          <a className="hub-nav-link" href="/customer-portal">Customer Portal</a>
         </nav>
       </aside>
-      <main className="dashboard-main">
-        <h1 className="dashboard-heading">Dashboard</h1>
+
+      <main className="hub-main">
+        <header className="hub-topbar">
+          <div>
+            <h1>Command Dashboard</h1>
+            <p>Track operations, proposals, and follow-ups in one view.</p>
+          </div>
+          <div className="hub-topbar-actions">
+            <button className="ghost-btn" type="button">Light/Dark (Soon)</button>
+            <button className="primary-btn" type="button">+ New Lead</button>
+          </div>
+        </header>
+
         {loading ? (
-          <div className="dashboard-kpi-row">
-            <SkeletonMetric width={110} height={54} count={4} />
-            <SkeletonMetric width={110} height={54} count={4} />
-          </div>
+          <>
+            <div className="kpi-grid">
+              <SkeletonMetric width={130} height={66} count={4} />
+              <SkeletonMetric width={130} height={66} count={4} />
+            </div>
+            <div className="section-grid">
+              <section className="panel wide"><SkeletonTable rows={4} cols={3} /></section>
+              <section className="panel"><SkeletonTable rows={3} cols={2} /></section>
+            </div>
+          </>
         ) : error ? (
-          <div className="dashboard-error">
-            <div className="dashboard-error-title">Unable to load dashboard metrics.</div>
-            <div className="dashboard-error-msg">{error}</div>
-            <button className="dashboard-btn" onClick={fetchMetrics}>Try Again</button>
+          <div className="error-panel">
+            <h3>Unable to load dashboard data.</h3>
+            <p>{error}</p>
+            <button className="primary-btn" onClick={fetchMetrics}>Try Again</button>
           </div>
-          ) : (
-            <>
-              <div className="dashboard-kpi-row">
-                <div className="dashboard-kpi-card kpi-blue">
-                  <div className="kpi-label">Tasks Due Today</div>
-                  <div className="kpi-value">{metrics.today}</div>
-                </div>
-                <div className="dashboard-kpi-card kpi-yellow">
-                  <div className="kpi-label">Overdue Tasks</div>
-                  <div className="kpi-value">{metrics.overdue}</div>
-                </div>
-                <div className="dashboard-kpi-card kpi-dark">
-                  <div className="kpi-label">Follow-ups Pending</div>
-                  <div className="kpi-value">{metrics.followups}</div>
-                </div>
-                <div className="dashboard-kpi-card kpi-outline">
-                  <div className="kpi-label">Proposals Created</div>
-                  <div className="kpi-value">{metrics.proposalsCreated}</div>
-                </div>
-                <div className="dashboard-kpi-card kpi-outline">
-                  <div className="kpi-label">Proposals Sent</div>
-                  <div className="kpi-value">{metrics.proposalsSent}</div>
-                </div>
-                <div className="dashboard-kpi-card kpi-outline">
-                  <div className="kpi-label">Signed Proposals</div>
-                  <div className="kpi-value">{metrics.proposalsSigned}</div>
-                </div>
-                <div className="dashboard-kpi-card kpi-outline">
-                  <div className="kpi-label">Proposal Conversion</div>
-                  <div className="kpi-value">{metrics.proposalConversion}%</div>
-                </div>
-                <div className="dashboard-kpi-card kpi-outline">
-                  <div className="kpi-label">Avg. Proposal Value</div>
-                  <div className="kpi-value">${metrics.avgValue}</div>
-                </div>
-              </div>
-              <div className="dashboard-sections">
-                <section className="dashboard-section">
-                  <h2>Pipeline Funnel</h2>
-                  <div className="dashboard-pipeline-funnel">
-                    <div className="funnel-card">
-                      <div className="funnel-label">Created</div>
-                      <div className="funnel-value">{metrics.proposalsCreated}</div>
+        ) : (
+          <>
+            <section className="kpi-grid">
+              <KpiCard label="Tasks Due Today" value={metrics.today} tone="accent" />
+              <KpiCard label="Overdue Tasks" value={metrics.overdue} tone="warning" />
+              <KpiCard label="Follow-ups Pending" value={metrics.followups} tone="neutral" />
+              <KpiCard label="Proposals Created" value={metrics.proposalsCreated} />
+              <KpiCard label="Proposals Sent" value={metrics.proposalsSent} />
+              <KpiCard label="Signed Proposals" value={metrics.proposalsSigned} />
+              <KpiCard label="Proposal Conversion" value={`${metrics.proposalConversion}%`} />
+              <KpiCard label="Avg. Proposal Value" value={`$${metrics.avgValue}`} />
+            </section>
+
+            <section className="section-grid">
+              <article className="panel wide">
+                <h2>Pipeline Funnel</h2>
+                <div className="funnel-track">
+                  {funnelData.map((step, idx) => (
+                    <div key={step.label} className="funnel-step">
+                      <span>{step.label}</span>
+                      <strong>{step.value}</strong>
+                      {idx < funnelData.length - 1 && <i>→</i>}
                     </div>
-                    <div className="funnel-arrow">→</div>
-                    <div className="funnel-card">
-                      <div className="funnel-label">Sent</div>
-                      <div className="funnel-value">{metrics.proposalsSent}</div>
-                    </div>
-                    <div className="funnel-arrow">→</div>
-                    <div className="funnel-card">
-                      <div className="funnel-label">Signed</div>
-                      <div className="funnel-value">{metrics.proposalsSigned}</div>
-                    </div>
-                  </div>
-                </section>
-                <section className="dashboard-section">
-                  <h2>Service Mix</h2>
-                  <div className="dashboard-service-mix">
-                    {Object.keys(metrics.financingMix).length === 0 ? (
-                      <div className="service-mix-empty">No financing data yet.</div>
-                    ) : (
-                      Object.entries(metrics.financingMix as Record<string, number | string>).map(([k, v]) => (
-                        <div className="service-mix-card" key={k}>
-                          <span className="service-mix-label">{k}</span>
-                          <span className="service-mix-value">{String(v)}</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </section>
-                <section className="dashboard-section ai-section">
-                  <h2>AI Insights</h2>
-                  <div className="ai-card">
-                    <div className="ai-icon">🤖</div>
-                    <div className="ai-message">AI-powered insights coming soon for your pipeline and proposals.</div>
-                  </div>
-                </section>
-              </div>
-            </>
-          )}
-        </main>
-        <style jsx>{`
-          .dashboard-root {
-            display: flex;
-            min-height: 100vh;
-            background: #f4f6fa;
+                  ))}
+                </div>
+              </article>
+
+              <article className="panel">
+                <h2>Service Mix</h2>
+                <div className="mix-grid">
+                  {Object.keys(metrics.financingMix).length === 0 ? (
+                    <p className="muted">No financing data yet.</p>
+                  ) : (
+                    Object.entries(metrics.financingMix as Record<string, number | string>).map(([k, v]) => (
+                      <div className="mix-tile" key={k}>
+                        <span>{k}</span>
+                        <strong>{String(v)}</strong>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </article>
+            </section>
+
+            <section className="section-grid two-columns">
+              <article className="panel wide">
+                <h2>Recent Leads</h2>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Service</th>
+                        <th>Stage</th>
+                        <th>Created</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentLeads.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="muted">No leads found.</td>
+                        </tr>
+                      ) : (
+                        recentLeads.map((lead) => (
+                          <tr key={lead.id}>
+                            <td>{lead.name || '-'}</td>
+                            <td>{lead.service_type || '-'}</td>
+                            <td>{lead.pipeline_stage || '-'}</td>
+                            <td>{formatDate(lead.created_at)}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </article>
+
+              <aside className="panel ai-panel">
+                <h2>MDB AI Assistant</h2>
+                <p>
+                  AI insights are enabled for follow-ups, proposal summaries, and next-best actions.
+                  Suggested focus: prioritize overdue follow-ups tied to high-bill leads.
+                </p>
+                <ul>
+                  <li>Generate follow-up for stalled leads</li>
+                  <li>Review proposal conversion by financing type</li>
+                  <li>Draft WhatsApp outreach from AI summary</li>
+                </ul>
+                <button className="ghost-btn" type="button">Open AI Assistant</button>
+              </aside>
+            </section>
+          </>
+        )}
+      </main>
+
+      <style jsx>{`
+        .hub-shell {
+          min-height: 100vh;
+          background: radial-gradient(circle at 5% 0%, #1f2937 0%, #111827 28%, #0b1120 100%);
+          display: grid;
+          grid-template-columns: 260px minmax(0, 1fr);
+        }
+        .hub-sidebar {
+          background: rgba(3, 7, 18, 0.9);
+          border-right: 1px solid rgba(148, 163, 184, 0.18);
+          padding: 24px 16px;
+          position: sticky;
+          top: 0;
+          height: 100vh;
+        }
+        .hub-brand {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 24px;
+        }
+        .hub-logo {
+          width: 38px;
+          height: 38px;
+          border-radius: 11px;
+          background: linear-gradient(135deg, #f59e0b, #f97316);
+          display: grid;
+          place-items: center;
+        }
+        .brand-title {
+          color: #f8fafc;
+          font-size: 1rem;
+          font-weight: 700;
+        }
+        .brand-subtitle {
+          color: #94a3b8;
+          font-size: 0.78rem;
+        }
+        .hub-nav {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+        .hub-nav-link {
+          color: #cbd5e1;
+          text-decoration: none;
+          padding: 10px 12px;
+          border-radius: 10px;
+          font-size: 0.95rem;
+          transition: 0.2s ease;
+        }
+        .hub-nav-link:hover,
+        .hub-nav-link.active {
+          background: rgba(30, 41, 59, 0.92);
+          color: #fff;
+        }
+        .hub-main {
+          padding: 28px;
+          background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+        }
+        .hub-topbar {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 16px;
+          margin-bottom: 20px;
+        }
+        .hub-topbar h1 {
+          margin: 0;
+          color: #0f172a;
+          font-size: 1.85rem;
+          letter-spacing: -0.03em;
+        }
+        .hub-topbar p {
+          margin: 8px 0 0;
+          color: #475569;
+        }
+        .hub-topbar-actions {
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+        .primary-btn,
+        .ghost-btn {
+          border: none;
+          border-radius: 10px;
+          padding: 10px 14px;
+          font-weight: 600;
+          cursor: pointer;
+        }
+        .primary-btn {
+          background: linear-gradient(130deg, #0f172a, #1d4ed8);
+          color: #fff;
+        }
+        .ghost-btn {
+          background: #e2e8f0;
+          color: #0f172a;
+        }
+        .kpi-grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 12px;
+          margin-bottom: 16px;
+        }
+        .kpi-card {
+          background: #fff;
+          border: 1px solid #e2e8f0;
+          border-radius: 14px;
+          padding: 14px;
+          box-shadow: 0 10px 30px -20px rgba(15, 23, 42, 0.35);
+        }
+        .kpi-card.accent {
+          background: linear-gradient(140deg, #172554, #1e3a8a);
+          color: #fff;
+          border: none;
+        }
+        .kpi-card.warning {
+          background: linear-gradient(140deg, #78350f, #b45309);
+          color: #fff;
+          border: none;
+        }
+        .kpi-card.neutral {
+          background: linear-gradient(140deg, #0f172a, #334155);
+          color: #fff;
+          border: none;
+        }
+        .kpi-label {
+          font-size: 0.83rem;
+          opacity: 0.85;
+          margin-bottom: 8px;
+        }
+        .kpi-value {
+          font-size: 1.7rem;
+          font-weight: 700;
+        }
+        .section-grid {
+          display: grid;
+          grid-template-columns: 2fr 1fr;
+          gap: 14px;
+          margin-bottom: 14px;
+        }
+        .section-grid.two-columns {
+          align-items: start;
+        }
+        .panel {
+          background: #fff;
+          border: 1px solid #e2e8f0;
+          border-radius: 14px;
+          padding: 16px;
+          box-shadow: 0 10px 30px -22px rgba(15, 23, 42, 0.35);
+        }
+        .panel.wide {
+          min-width: 0;
+        }
+        .panel h2 {
+          margin: 0 0 12px;
+          font-size: 1.05rem;
+          color: #0f172a;
+        }
+        .funnel-track {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 8px;
+        }
+        .funnel-step {
+          border: 1px solid #cbd5e1;
+          border-radius: 12px;
+          padding: 12px;
+          background: #f8fafc;
+          position: relative;
+        }
+        .funnel-step span {
+          display: block;
+          font-size: 0.84rem;
+          color: #475569;
+        }
+        .funnel-step strong {
+          font-size: 1.3rem;
+          color: #0f172a;
+        }
+        .funnel-step i {
+          position: absolute;
+          right: -12px;
+          top: 50%;
+          transform: translateY(-50%);
+          color: #94a3b8;
+          font-style: normal;
+          font-size: 1rem;
+        }
+        .mix-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+        }
+        .mix-tile {
+          border: 1px solid #e2e8f0;
+          border-radius: 10px;
+          padding: 10px;
+          background: #f8fafc;
+        }
+        .mix-tile span {
+          color: #64748b;
+          font-size: 0.82rem;
+        }
+        .mix-tile strong {
+          display: block;
+          margin-top: 6px;
+          color: #0f172a;
+          font-size: 1.1rem;
+        }
+        .table-wrap {
+          overflow-x: auto;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+        th,
+        td {
+          text-align: left;
+          padding: 10px 8px;
+          border-bottom: 1px solid #e2e8f0;
+          font-size: 0.9rem;
+        }
+        th {
+          color: #475569;
+          font-weight: 600;
+        }
+        td {
+          color: #0f172a;
+        }
+        .ai-panel p {
+          margin: 0 0 10px;
+          color: #334155;
+          line-height: 1.45;
+        }
+        .ai-panel ul {
+          margin: 0 0 14px;
+          padding-left: 18px;
+          color: #334155;
+        }
+        .muted {
+          color: #64748b;
+        }
+        .error-panel {
+          background: #fff;
+          border: 1px solid #fecaca;
+          border-radius: 14px;
+          padding: 18px;
+        }
+        .error-panel h3 {
+          margin: 0;
+          color: #b91c1c;
+        }
+        .error-panel p {
+          color: #7f1d1d;
+        }
+        @media (max-width: 1200px) {
+          .kpi-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
           }
-          .dashboard-sidebar {
-            background: #1a1d2e;
-            color: #fff;
-            min-width: 220px;
-            width: 220px;
-            padding: 2.5rem 1.2rem 1.2rem 1.2rem;
-            display: flex;
+          .section-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+        @media (max-width: 900px) {
+          .hub-shell {
+            grid-template-columns: 1fr;
+          }
+          .hub-sidebar {
+            position: static;
+            height: auto;
+            padding: 12px;
+          }
+          .hub-nav {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+          .hub-main {
+            padding: 14px;
+          }
+          .hub-topbar {
             flex-direction: column;
-            align-items: flex-start;
           }
-          .dashboard-logo-row {
-            display: flex;
-            align-items: center;
-            gap: 0.7rem;
-            margin-bottom: 2.5rem;
+          .kpi-grid {
+            grid-template-columns: 1fr;
           }
-          .dashboard-logo-circle {
-            background: #fff;
-            border-radius: 50%;
-            box-shadow: 0 2px 8px rgba(43,57,144,0.10);
-            padding: 0.3rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+          .mix-grid {
+            grid-template-columns: 1fr;
           }
-          .dashboard-title {
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: #fbb040;
-            letter-spacing: -0.5px;
-          }
-          .dashboard-nav {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-            width: 100%;
-          }
-          .dashboard-nav-link {
-            color: #fff;
-            text-decoration: none;
-            font-size: 1.08rem;
-            font-weight: 500;
-            padding: 0.7em 1em;
-            border-radius: 7px;
-            transition: background 0.16s;
-          }
-          .dashboard-nav-link.active, .dashboard-nav-link:hover {
-            background: #2b3990;
-            color: #fbb040;
-          }
-          .dashboard-main {
-            flex: 1;
-            padding: 2.5rem 2.5rem 2.5rem 2.5rem;
-            min-width: 0;
-            display: flex;
-            flex-direction: column;
-          }
-          .dashboard-heading {
-            font-size: 2rem;
-            font-weight: 700;
-            color: #2b3990;
-            margin-bottom: 2.2rem;
-          }
-          .dashboard-kpi-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1.5rem;
-            margin-bottom: 2.5rem;
-          }
-          .dashboard-kpi-card {
-            background: #fff;
-            border-radius: 14px;
-            box-shadow: 0 2px 12px rgba(43,57,144,0.07);
-            padding: 1.2rem 2.2rem;
-            min-width: 110px;
-            flex: 1 1 180px;
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-            border: none;
-          }
-          .kpi-blue {
-            background: linear-gradient(90deg, #2b3990 80%, #fbb040 100%);
-            color: #fff;
-          }
-          .kpi-yellow {
-            background: linear-gradient(90deg, #fbb040 80%, #2b3990 100%);
-            color: #2b3990;
-          }
-          .kpi-dark {
-            background: #1a1d2e;
-            color: #fff;
-          }
-          .kpi-outline {
-            border: 1.5px solid #2b3990;
-            background: #fff;
-            color: #2b3990;
-          }
-          .kpi-label {
-            font-size: 1.02rem;
-            font-weight: 500;
-            margin-bottom: 0.3em;
-          }
-          .kpi-value {
-            font-size: 2.1rem;
-            font-weight: 700;
-          }
-          .dashboard-sections {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 2.5rem;
-            margin-top: 2.5rem;
-          }
-          .dashboard-section {
-            background: #fff;
-            border-radius: 14px;
-            box-shadow: 0 2px 12px rgba(43,57,144,0.07);
-            padding: 2rem 2rem 1.5rem 2rem;
-            min-width: 320px;
-            flex: 1 1 340px;
-            display: flex;
-            flex-direction: column;
-          }
-          .dashboard-section h2 {
-            color: #2b3990;
-            font-size: 1.2rem;
-            font-weight: 700;
-            margin-bottom: 1.2rem;
-          }
-          .dashboard-pipeline-funnel {
-            display: flex;
-            align-items: center;
-            gap: 1.2rem;
-          }
-          .funnel-card {
-            background: #e9edf7;
-            border-radius: 10px;
-            padding: 1.1rem 1.7rem;
-            text-align: center;
-            min-width: 90px;
-          }
-          .funnel-label {
-            color: #2b3990;
-            font-size: 1.01rem;
-            font-weight: 600;
-          }
-          .funnel-value {
-            color: #1a1d2e;
-            font-size: 1.5rem;
-            font-weight: 700;
-          }
-          .funnel-arrow {
-            font-size: 2rem;
-            color: #b0b6d1;
-          }
-          .dashboard-service-mix {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1.1rem;
-          }
-          .service-mix-card {
-            background: #e9edf7;
-            border-radius: 8px;
-            padding: 0.8em 1.3em;
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-            min-width: 90px;
-          }
-          .service-mix-label {
-            color: #2b3990;
-            font-size: 1.01rem;
-            font-weight: 600;
-          }
-          .service-mix-value {
-            color: #1a1d2e;
-            font-size: 1.2rem;
-            font-weight: 700;
-          }
-          .service-mix-empty {
-            color: #b0b6d1;
-            font-size: 1.1rem;
-          }
-          .ai-section {
-            min-width: 320px;
-            flex: 1 1 340px;
-          }
-          .ai-card {
-            background: #e9edf7;
-            border-radius: 10px;
-            padding: 1.5rem 1.2rem;
-            display: flex;
-            align-items: center;
-            gap: 1.2rem;
-          }
-          .ai-icon {
-            font-size: 2.2rem;
-          }
-          .ai-message {
-            color: #2b3990;
-            font-size: 1.1rem;
-            font-weight: 500;
-          }
-          .dashboard-error {
-            background: #fff3f3;
-            color: #b00020;
-            padding: 1.5rem 2rem;
-            border-radius: 10px;
-            margin: 2rem 0;
-            text-align: center;
-          }
-          .dashboard-error-title {
-            font-weight: 700;
-            font-size: 1.2rem;
-          }
-          .dashboard-error-msg {
-            margin: 1em 0;
-          }
-          .dashboard-btn {
-            background: #2b3990;
-            color: #fff;
-            border: none;
-            padding: 0.7em 1.5em;
-            border-radius: 7px;
-            font-weight: 600;
-            font-size: 1.05rem;
-            margin-top: 1em;
-            transition: background 0.18s;
-          }
-          .dashboard-btn:hover {
-            background: #fbb040;
-            color: #2b3990;
-          }
-          @media (max-width: 900px) {
-            .dashboard-root {
-              flex-direction: column;
-            }
-            .dashboard-sidebar {
-              position: static;
-              width: 100vw;
-              min-width: unset;
-              flex-direction: row;
-              align-items: center;
-              justify-content: flex-start;
-              padding: 1.2rem 0.7rem;
-              gap: 1.5rem;
-            }
-            .dashboard-logo-row {
-              margin-bottom: 0;
-            }
-            .dashboard-nav {
-              flex-direction: row;
-              gap: 0.5rem;
-            }
-            .dashboard-main {
-              padding: 1.2rem 0.7rem;
-            }
-            .dashboard-kpi-row {
-              gap: 0.7rem;
-            }
-            .dashboard-section {
-              padding: 1.2rem 0.7rem 1rem 0.7rem;
-              min-width: 90vw;
-              border-radius: 10px;
-            }
-          }
-        `}</style>
-      </div>
-    );
-  }
+        }
+      `}</style>
+    </div>
+  );
+}
