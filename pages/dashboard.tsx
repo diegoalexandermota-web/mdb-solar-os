@@ -42,6 +42,93 @@ type LeadRow = {
   monthly_bill: number | null;
 };
 
+const PREVIEW_METRICS: MetricState = {
+  today: 28,
+  overdue: 7,
+  followups: 22,
+  proposalsCreated: 14,
+  proposalsSent: 9,
+  proposalsSigned: 4,
+  proposalConversion: 29,
+  avgValue: 312,
+  financingMix: { Cash: 5, Loan: 7, Lease: 2 },
+};
+
+const PREVIEW_LEADS: LeadRow[] = [
+  {
+    id: 'preview-1',
+    name: 'Carlos Hernandez',
+    address: '123 Solar Ave',
+    city: 'Orlando',
+    utility_company: 'Duke Energy',
+    service_type: 'Solar',
+    pipeline_stage: 'Proposal Sent',
+    assigned_rep: 'Diego Mota',
+    created_at: null,
+    monthly_bill: 312,
+  },
+  {
+    id: 'preview-2',
+    name: 'Maria Smith',
+    address: '44 Sunshine Dr',
+    city: 'Kissimmee',
+    utility_company: 'FPL',
+    service_type: 'Solar',
+    pipeline_stage: 'Credit Approved',
+    assigned_rep: 'Diego Mota',
+    created_at: null,
+    monthly_bill: 289,
+  },
+  {
+    id: 'preview-3',
+    name: 'James Johnson',
+    address: '88 Oak Ridge Rd',
+    city: 'Clermont',
+    utility_company: 'Duke Energy',
+    service_type: 'Water',
+    pipeline_stage: 'Contract Signed',
+    assigned_rep: 'MDB Rep',
+    created_at: null,
+    monthly_bill: 241,
+  },
+  {
+    id: 'preview-4',
+    name: 'Jennifer Garcia',
+    address: '17 Palm Way',
+    city: 'Tampa',
+    utility_company: 'TECO',
+    service_type: 'Solar',
+    pipeline_stage: 'Contacted',
+    assigned_rep: 'MDB Rep',
+    created_at: null,
+    monthly_bill: 267,
+  },
+  {
+    id: 'preview-5',
+    name: 'Luis Martinez',
+    address: '505 Horizon Blvd',
+    city: 'Lakeland',
+    utility_company: 'FPL',
+    service_type: 'HVAC',
+    pipeline_stage: 'Appointment Set',
+    assigned_rep: 'MDB Rep',
+    created_at: null,
+    monthly_bill: 198,
+  },
+  {
+    id: 'preview-6',
+    name: 'Ashley Brown',
+    address: '9 Blue Sky Ct',
+    city: 'Orlando',
+    utility_company: 'Duke Energy',
+    service_type: 'Battery',
+    pipeline_stage: 'Installed',
+    assigned_rep: 'MDB Rep',
+    created_at: null,
+    monthly_bill: 354,
+  },
+];
+
 function fmtCurrency(value: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
 }
@@ -80,19 +167,11 @@ function Kpi({
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [previewMode, setPreviewMode] = useState(false);
   const [metrics, setMetrics] = useState<MetricState>({
-    today: 0,
-    overdue: 0,
-    followups: 0,
-    proposalsCreated: 0,
-    proposalsSent: 0,
-    proposalsSigned: 0,
-    proposalConversion: 0,
-    avgValue: 0,
-    financingMix: {},
+    ...PREVIEW_METRICS,
   });
-  const [recentLeads, setRecentLeads] = useState<LeadRow[]>([]);
+  const [recentLeads, setRecentLeads] = useState<LeadRow[]>(PREVIEW_LEADS);
 
   useEffect(() => {
     void fetchMetrics();
@@ -100,7 +179,7 @@ export default function Dashboard() {
 
   async function fetchMetrics() {
     setLoading(true);
-    setError(null);
+    setPreviewMode(false);
 
     try {
       const today = new Date().toISOString().slice(0, 10);
@@ -195,7 +274,9 @@ export default function Dashboard() {
         })),
       );
     } catch (e: any) {
-      setError(e.message || 'Unable to load dashboard metrics');
+      setPreviewMode(true);
+      setMetrics(PREVIEW_METRICS);
+      setRecentLeads(PREVIEW_LEADS);
     }
 
     setLoading(false);
@@ -213,17 +294,7 @@ export default function Dashboard() {
     { label: 'Contract → Installed', n: Math.max(installed, 0), w: 25 },
   ];
 
-  if (loading) {
-    return <div className="p-4 lg:p-6 text-sm text-muted-foreground">Loading dashboard...</div>;
-  }
-
-  if (error) {
-    return (
-      <div className="p-4 lg:p-6">
-        <div className="bg-card rounded-xl border border-destructive/30 p-4 text-destructive">{error}</div>
-      </div>
-    );
-  }
+  const showPreview = loading || previewMode;
 
   return (
     <div className="p-4 lg:p-6 space-y-5">
@@ -241,15 +312,22 @@ export default function Dashboard() {
         }
       />
 
+      {showPreview && (
+        <div className="rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-950 dark:text-amber-100 flex items-center gap-2">
+          <span className="inline-flex size-2 rounded-full bg-amber-500" />
+          Live data unavailable — showing preview structure.
+        </div>
+      )}
+
       <div className="grid grid-cols-2 md:grid-cols-4 2xl:grid-cols-8 gap-3">
-        <Kpi icon={Users} label="Total leads" value={String(metrics.proposalsCreated)} sub="+12%" accent="primary" />
-        <Kpi icon={CalendarCheck} label="Appointments booked" value={String(metrics.today)} sub="+8%" accent="primary" />
-        <Kpi icon={FileText} label="Proposals sent" value={String(metrics.proposalsSent)} sub="+22%" accent="gold" />
-        <Kpi icon={FileSignature} label="Contracts signed" value={String(metrics.proposalsSigned)} sub="+5%" accent="success" />
-        <Kpi icon={HardHat} label="Installed projects" value={String(installed)} sub="+3" accent="success" />
-        <Kpi icon={DollarSign} label="Pending commissions" value={fmtCurrency(pendingComm)} sub="+$4.2k" accent="gold" />
-        <Kpi icon={TrendingUp} label="Monthly revenue est." value={fmtCurrency(monthlyRev)} sub="+18%" accent="primary" />
-        <Kpi icon={Activity} label="Conversion rate" value={`${metrics.proposalConversion}%`} sub="+1.4pt" accent="success" />
+        <Kpi icon={Users} label="Total leads" value={String(metrics.proposalsCreated)} sub={showPreview ? 'preview' : '+12%'} accent="primary" />
+        <Kpi icon={CalendarCheck} label="Appointments booked" value={String(metrics.today)} sub={showPreview ? 'preview' : '+8%'} accent="primary" />
+        <Kpi icon={FileText} label="Proposals sent" value={String(metrics.proposalsSent)} sub={showPreview ? 'preview' : '+22%'} accent="gold" />
+        <Kpi icon={FileSignature} label="Contracts signed" value={String(metrics.proposalsSigned)} sub={showPreview ? 'preview' : '+5%'} accent="success" />
+        <Kpi icon={HardHat} label="Installed projects" value={String(installed)} sub={showPreview ? 'preview' : '+3'} accent="success" />
+        <Kpi icon={DollarSign} label="Pending commissions" value={fmtCurrency(pendingComm)} sub={showPreview ? 'preview' : '+$4.2k'} accent="gold" />
+        <Kpi icon={TrendingUp} label="Monthly revenue est." value={fmtCurrency(monthlyRev)} sub={showPreview ? 'preview' : '+18%'} accent="primary" />
+        <Kpi icon={Activity} label="Conversion rate" value={`${metrics.proposalConversion}%`} sub={showPreview ? 'preview' : '+1.4pt'} accent="success" />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4">
@@ -305,7 +383,8 @@ export default function Dashboard() {
           <div className="mt-6 p-4 rounded-lg bg-gradient-to-br from-navy to-primary text-primary-foreground">
             <div className="text-[10px] uppercase tracking-widest opacity-70">MDB AI Insight</div>
             <p className="text-sm mt-1.5 leading-relaxed">
-              {metrics.overdue} records need urgent follow-up. <span className="text-gold font-semibold">Draft follow-ups →</span>
+              {showPreview ? 'Preview structure is active until live data loads.' : `${metrics.overdue} records need urgent follow-up.`}{' '}
+              <span className="text-gold font-semibold">Draft follow-ups →</span>
             </p>
           </div>
         </div>
@@ -319,7 +398,7 @@ export default function Dashboard() {
           </Link>
         </div>
         <div className="divide-y divide-border">
-          {recentLeads.map((l) => (
+          {recentLeads.length ? recentLeads.map((l) => (
             <Link key={l.id} href={`/leads/${l.id}`} className="flex items-center gap-4 px-6 py-3.5 hover:bg-secondary/50 transition-colors">
               <div className="size-9 rounded-full bg-gradient-to-br from-primary to-primary-glow text-primary-foreground grid place-items-center text-xs font-semibold">
                 {(l.name || 'U').split(' ').map((p) => p[0]).join('').slice(0, 2)}
@@ -332,7 +411,11 @@ export default function Dashboard() {
               <StageBadge stage={l.pipeline_stage || 'New Lead'} />
               <div className="text-xs text-muted-foreground hidden md:block w-24 truncate text-right">{l.assigned_rep || 'MDB Rep'}</div>
             </Link>
-          ))}
+          )) : (
+            <div className="px-6 py-10 text-sm text-muted-foreground text-center">
+              No live leads available in this preview state.
+            </div>
+          )}
         </div>
       </div>
     </div>
