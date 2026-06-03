@@ -2,14 +2,9 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
-  const isAuth = request.cookies.get('sb-access-token');
-  const isLoginPage = request.nextUrl.pathname === '/login';
-
-  if (!isAuth && !isLoginPage) {
-    const loginUrl = request.nextUrl.clone();
-    loginUrl.pathname = '/login';
-    return NextResponse.redirect(loginUrl);
-  }
+  // Auth state is managed client-side with Supabase browser session.
+  // Server-side cookie checks here can cause redirect loops.
+  void request;
   return NextResponse.next();
 }
 

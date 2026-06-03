@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../utils/supabaseClient';
 
@@ -11,6 +11,7 @@ function validateEmail(email: string) {
 
 export default function Login() {
   const router = useRouter();
+  const hasRedirectedRef = useRef(false);
   const [mode, setMode] = useState<AuthMode>('password');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,17 +24,26 @@ export default function Login() {
     let isMounted = true;
     let subscription: { unsubscribe: () => void } | null = null;
 
+    const redirectToDashboardOnce = () => {
+      if (hasRedirectedRef.current) return;
+      if (router.pathname === '/dashboard') return;
+      hasRedirectedRef.current = true;
+      console.log('REDIRECT_TO_DASHBOARD');
+      router.push('/dashboard');
+    };
+
     const bootstrapAuth = async () => {
       const { data } = await supabase.auth.getSession();
       if (!isMounted) return;
       if (data.session) {
-        router.replace('/dashboard');
+        redirectToDashboardOnce();
         return;
       }
 
       const authState = supabase.auth.onAuthStateChange((event, session) => {
+        console.log('AUTH_STATE', event);
         if (event === 'SIGNED_IN' && session) {
-          router.replace('/dashboard');
+          redirectToDashboardOnce();
         }
       });
       subscription = authState.data.subscription;
@@ -99,7 +109,11 @@ export default function Login() {
         showToast('Sign in failed');
       } else {
         console.log('LOGIN_SUCCESS');
-        router.push('/dashboard');
+        if (!hasRedirectedRef.current && router.pathname !== '/dashboard') {
+          hasRedirectedRef.current = true;
+          console.log('REDIRECT_TO_DASHBOARD');
+          router.push('/dashboard');
+        }
       }
     } catch (err) {
       console.log('LOGIN_ERROR', err);
