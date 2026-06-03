@@ -151,6 +151,31 @@ export default function Login() {
     setSaving(false);
   }
 
+  async function handleForgotPasswordRequest() {
+    if (saving) return;
+    setError('');
+    setSuccessMsg('');
+
+    if (!email.trim() || !validateEmail(email)) {
+      setError('Enter a valid email first to reset your password.');
+      return;
+    }
+
+    setSaving(true);
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback`,
+    });
+
+    if (resetError) {
+      setError(resetError.message);
+      showToast('Unable to send recovery email');
+    } else {
+      setSuccessMsg('Password recovery email sent. Check your inbox for the reset link.');
+      showToast('Recovery email sent');
+    }
+    setSaving(false);
+  }
+
   const headingMap: Record<AuthMode, string> = {
     password: 'Sign in to your account',
     magic: 'Sign in with Magic Link',
@@ -221,6 +246,14 @@ export default function Login() {
                 disabled={saving}
                 autoComplete="current-password"
               />
+              <button
+                type="button"
+                className="login-inline-link"
+                onClick={handleForgotPasswordRequest}
+                disabled={saving}
+              >
+                Forgot password?
+              </button>
               {error && <div className="login-error">{error}</div>}
               <button type="submit" className="login-btn" disabled={saving}>
                 {saving ? 'Signing in...' : 'Sign In'}
@@ -448,6 +481,25 @@ export default function Login() {
         }
         .login-link-btn:hover {
           color: #fbb040;
+        }
+        .login-inline-link {
+          align-self: flex-start;
+          background: none;
+          border: none;
+          color: #2b3990;
+          cursor: pointer;
+          font-size: 0.94rem;
+          text-decoration: underline;
+          text-underline-offset: 2px;
+          padding: 0;
+          margin-top: -0.2em;
+        }
+        .login-inline-link:hover {
+          color: #fbb040;
+        }
+        .login-inline-link:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
         }
         .login-toast {
           margin-bottom: 1.1em;

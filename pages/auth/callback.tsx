@@ -9,6 +9,12 @@ export default function AuthCallback() {
     if (!router.isReady) return;
 
     const exchangeCode = async () => {
+      // Password recovery links commonly arrive with tokens in the URL hash.
+      if (typeof window !== 'undefined' && window.location.hash.includes('type=recovery')) {
+        router.replace(`/reset-password${window.location.hash}`);
+        return;
+      }
+
       const rawCode = router.query.code;
       const code = Array.isArray(rawCode) ? rawCode[0] : rawCode;
 
