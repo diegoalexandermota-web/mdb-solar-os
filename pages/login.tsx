@@ -38,6 +38,17 @@ export default function Login() {
     };
   }, [router]);
 
+  useEffect(() => {
+    if (!router.isReady) return;
+    const rawError = router.query.error;
+    const authError = Array.isArray(rawError) ? rawError[0] : rawError;
+    if (authError) {
+      setError(authError);
+      setToast('Authentication failed, please try again');
+      setTimeout(() => setToast(null), 3000);
+    }
+  }, [router.isReady, router.query.error]);
+
   function validate() {
     if (!email.trim()) return 'Email is required';
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return 'Valid email required';
@@ -59,7 +70,7 @@ export default function Login() {
     const { error: supaError } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${window.location.origin}/dashboard`,
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     });
     if (supaError) {
