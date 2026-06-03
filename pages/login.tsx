@@ -24,29 +24,6 @@ export default function Login() {
     let subscription: { unsubscribe: () => void } | null = null;
 
     const bootstrapAuth = async () => {
-      // Handle hash-based auth first to prevent session guards from intercepting recovery.
-      if (typeof window !== 'undefined') {
-        const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
-        const hashParams = new URLSearchParams(hash);
-        const accessToken = hashParams.get('access_token');
-        const refreshToken = hashParams.get('refresh_token');
-        const type = hashParams.get('type');
-
-        if (accessToken && refreshToken) {
-          await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-
-          if (type === 'recovery') {
-            window.location.replace('/reset-password');
-          } else {
-            window.location.replace('/dashboard');
-          }
-          return;
-        }
-      }
-
       const { data } = await supabase.auth.getSession();
       if (!isMounted) return;
       if (data.session) {
@@ -97,8 +74,9 @@ export default function Login() {
     setTimeout(() => setToast(null), 2800);
   }
 
-  async function handlePasswordSignIn(e: React.FormEvent) {
+  async function handleEmailPasswordLogin(e: React.FormEvent) {
     e.preventDefault();
+    console.log('LOGIN_HANDLER_START');
     if (saving) return;
     setError('');
     if (!email.trim() || !validateEmail(email)) {
@@ -110,12 +88,24 @@ export default function Login() {
       return;
     }
     setSaving(true);
-    const { error: supaError } = await supabase.auth.signInWithPassword({ email, password });
-    if (supaError) {
-      setError(supaError.message);
+    try {
+      const { error: supaError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (supaError) {
+        console.log('LOGIN_ERROR', supaError);
+        setError(supaError.message);
+        showToast('Sign in failed');
+      } else {
+        console.log('LOGIN_SUCCESS');
+        router.push('/dashboard');
+      }
+    } catch (err) {
+      console.log('LOGIN_ERROR', err);
+      setError('Unexpected login error');
       showToast('Sign in failed');
     }
-    // On success, onAuthStateChange fires and redirects to /dashboard.
     setSaving(false);
   }
 
@@ -246,7 +236,7 @@ export default function Login() {
 
           {/* Email & Password sign-in */}
           {mode === 'password' && (
-            <form className="login-form" onSubmit={handlePasswordSignIn} autoComplete="on">
+            <form className="login-form" onSubmit={handleEmailPasswordLogin} autoComplete="on">
               <label htmlFor="email" className="login-label">Email address</label>
               <input
                 id="email"
